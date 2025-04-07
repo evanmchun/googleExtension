@@ -4,75 +4,133 @@
   <title>Email Reply Helper</title>
   <style>
     body {
+      font-family: Arial, sans-serif;
       width: 400px;
-      padding: 16px;
-      font-family: 'Google Sans', Arial, sans-serif;
+      max-height: 600px;
+      margin: 0;
+      padding: 10px;
+      overflow-y: auto;
     }
-    .section {
-      margin-bottom: 20px;
+    
+    h1 {
+      font-size: 18px;
+      margin-bottom: 15px;
+      color: #1a73e8;
     }
-    .request-card {
-      border: 1px solid #dadce0;
-      border-radius: 8px;
-      padding: 12px;
-      margin-bottom: 12px;
-    }
-    .request-header {
-      font-weight: 500;
-      margin-bottom: 8px;
-    }
-    .request-meta {
-      color: #5f6368;
-      font-size: 12px;
-      margin-bottom: 8px;
-    }
-    .request-note {
-      background: #f8f9fa;
-      padding: 8px;
-      border-radius: 4px;
-      margin-bottom: 8px;
-    }
-    .suggestions-list {
-      margin-top: 12px;
-    }
-    .suggestion {
-      border-left: 3px solid #1a73e8;
-      padding-left: 8px;
-      margin-bottom: 8px;
-    }
-    .no-requests {
-      color: #5f6368;
-      text-align: center;
+    
+    .loading, .error, .empty {
       padding: 20px;
+      text-align: center;
+      color: #666;
     }
-    .status-badge {
-      display: inline-block;
-      padding: 2px 8px;
-      border-radius: 12px;
-      font-size: 12px;
-      margin-left: 8px;
-    }
-    .status-pending {
-      background: #fce8e6;
+    
+    .error {
       color: #d93025;
     }
-    .status-in-progress {
-      background: #fef7e0;
-      color: #ea8600;
+    
+    .email-item {
+      border: 1px solid #e0e0e0;
+      border-radius: 8px;
+      margin-bottom: 15px;
+      padding: 15px;
+      background-color: #f8f9fa;
     }
-    .status-completed {
-      background: #e6f4ea;
-      color: #137333;
+    
+    .email-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+    
+    .email-header h3 {
+      margin: 0;
+      font-size: 16px;
+      color: #202124;
+    }
+    
+    .timestamp {
+      font-size: 12px;
+      color: #5f6368;
+    }
+    
+    .email-details {
+      margin-bottom: 15px;
+      font-size: 14px;
+    }
+    
+    .email-details p {
+      margin: 5px 0;
+    }
+    
+    .suggestions {
+      margin-bottom: 15px;
+    }
+    
+    .suggestions h4 {
+      font-size: 14px;
+      margin-bottom: 10px;
+      color: #202124;
+    }
+    
+    .suggestions ul {
+      list-style-type: none;
+      padding: 0;
+      margin: 0;
+    }
+    
+    .suggestions li {
+      background-color: #fff;
+      border: 1px solid #e0e0e0;
+      border-radius: 4px;
+      padding: 10px;
+      margin-bottom: 8px;
+    }
+    
+    .suggestions p {
+      margin: 0 0 5px 0;
+      font-size: 14px;
+    }
+    
+    .suggestions small {
+      color: #5f6368;
+      font-size: 12px;
+    }
+    
+    .add-suggestion {
+      margin-top: 10px;
+    }
+    
+    .add-suggestion textarea {
+      width: 100%;
+      height: 60px;
+      padding: 8px;
+      border: 1px solid #e0e0e0;
+      border-radius: 4px;
+      resize: none;
+      margin-bottom: 8px;
+      font-family: inherit;
+    }
+    
+    .add-suggestion button {
+      background-color: #1a73e8;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      padding: 8px 12px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    
+    .add-suggestion button:hover {
+      background-color: #1765cc;
     }
   </style>
 </head>
 <body>
-  <div id="requests-section" class="section">
-    <h3>Help Requests</h3>
-    <div id="requests-list">
-      <!-- Requests will be populated here -->
-      <div class="no-requests">Loading requests...</div>
-    </div>
+  <h1>Email Reply Helper</h1>
+  <div id="requests-list">
+    <div class="loading">Loading requests...</div>
   </div>
   <script src="popup.js"></script>
 </body>

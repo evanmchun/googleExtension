@@ -1,48 +1,47 @@
 {
   "manifest_version": 3,
   "name": "Email Reply Helper",
-  "version": "1.0.1",
-  "description": "Get help with email replies from colleagues",
+  "version": "1.0",
+  "description": "Get help with email replies from your team",
   "permissions": [
     "storage",
     "identity",
     "identity.email",
     "notifications",
-    "tabs"
+    "cookies"
+  ],
+  "host_permissions": [
+    "https://www.googleapis.com/*",
+    "http://localhost:3001/*"
   ],
   "oauth2": {
     "client_id": "${CHROME_CLIENT_ID}",
     "scopes": [
-      "https://www.googleapis.com/auth/userinfo.email"
+      "https://www.googleapis.com/auth/userinfo.email",
+      "https://www.googleapis.com/auth/gmail.readonly"
     ]
   },
-  "host_permissions": [
-    "https://mail.google.com/*"
-  ],
-  "action": {
-    "default_popup": "popup.html",
-    "default_icon": {
-      "16": "icon.png",
-      "32": "icon.png",
-      "48": "icon.png",
-      "128": "icon.png"
-    },
-    "default_title": "Email Reply Helper"
+  "background": {
+    "service_worker": "background.js"
   },
   "content_scripts": [
     {
       "matches": ["https://mail.google.com/*"],
-      "css": ["styles.css"],
-      "js": ["content.js"]
+      "js": ["content.js"],
+      "css": ["styles.css"]
     }
   ],
-  "background": {
-    "service_worker": "background.js"
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
   },
   "icons": {
-    "16": "icon.png",
-    "32": "icon.png",
-    "48": "icon.png",
-    "128": "icon.png"
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
   }
 } 
