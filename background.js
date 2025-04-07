@@ -5,46 +5,12 @@ const SERVER_URL = 'http://localhost:3001'; // Local test server URL
 chrome.runtime.onInstalled.addListener(async () => {
   console.log('Email Reply Helper installed');
   
-  // Add a test email to local storage
   try {
-    console.log('=== BACKGROUND: Adding test email on installation ===');
-    
-    // Clear storage first
+    // Clear storage on fresh install
     await clearLocalStorage();
-    
-    // Create test email data
-    const emailId = `Test Email-${Date.now()}`;
-    console.log('=== BACKGROUND: Generated emailId:', emailId, '===');
-    
-    const testEmail = {
-      email: {
-        subject: 'Test Email',
-        body: 'This is a test email body',
-        from: '4288melheritage@gmail.com',
-        timestamp: Date.now()
-      },
-      taggedPeople: ['jchun1112@gmail.com'],
-      note: 'This is a test note',
-      requester: '4288melheritage@gmail.com',
-      timestamp: Date.now(),
-      status: 'pending',
-      suggestions: []
-    };
-    
-    console.log('=== BACKGROUND: Created test email data:', testEmail, '===');
-    
-    // Save to local storage
-    console.log('=== BACKGROUND: Saving to local storage ===');
-    await chrome.storage.local.set({ taggedEmails: { [emailId]: testEmail } });
-    
-    // Verify the save
-    console.log('=== BACKGROUND: Verifying save ===');
-    const verifyResult = await chrome.storage.local.get(['taggedEmails']);
-    console.log('=== BACKGROUND: Verification result:', verifyResult, '===');
-    
-    console.log('=== BACKGROUND: Test email added successfully on installation ===');
+    console.log('=== BACKGROUND: Storage cleared on installation ===');
   } catch (error) {
-    console.error('=== BACKGROUND: Error adding test email on installation:', error, '===');
+    console.error('=== BACKGROUND: Error clearing storage on installation:', error, '===');
   }
 });
 
@@ -122,15 +88,15 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       });
     return true; // Keep the message channel open for async response
   }
-  else if (request.type === 'ADD_TEST_EMAIL') {
-    console.log('=== BACKGROUND: Handling ADD_TEST_EMAIL request ===');
-    addTestEmail()
+  else if (request.type === 'CLEAR_STORAGE') {
+    console.log('=== BACKGROUND: Handling CLEAR_STORAGE request ===');
+    clearLocalStorage()
       .then(response => {
-        console.log('=== BACKGROUND: ADD_TEST_EMAIL response:', response, '===');
+        console.log('=== BACKGROUND: CLEAR_STORAGE response:', response, '===');
         sendResponse(response);
       })
       .catch(error => {
-        console.error('=== BACKGROUND: ADD_TEST_EMAIL error:', error, '===');
+        console.error('=== BACKGROUND: CLEAR_STORAGE error:', error, '===');
         sendResponse({ success: false, error: error.message });
       });
     return true; // Keep the message channel open for async response
@@ -208,54 +174,77 @@ async function getUserEmail() {
 
 // Handle email tagging
 async function handleEmailTagging(data) {
-  console.log('=== BACKGROUND: Starting email tagging process with data:', data, '===');
-  
   try {
+    console.log('=== BACKGROUND: Starting email tagging process ===');
+    console.log('=== BACKGROUND: Received data:', {
+      subject: data.emailData.subject,
+      from: data.emailData.from,
+      taggedPeople: data.taggedPeople,
+      note: data.note
+    }, '===');
+    
     // Get the current user's email
     const userEmail = await getUserEmail();
     console.log('=== BACKGROUND: Current user email:', userEmail, '===');
     
     if (!userEmail) {
       console.error('=== BACKGROUND: Could not determine user email ===');
-      throw new Error('Could not determine your email address');
+      return { success: false, error: 'Could not determine user email' };
     }
-    
-    // For testing, use local storage instead of the server
-    console.log('=== BACKGROUND: Using local storage for testing ===');
-    const result = await chrome.storage.local.get(['taggedEmails']);
-    console.log('=== BACKGROUND: Current storage state:', result, '===');
-    
-    // Initialize taggedEmails if it doesn't exist
-    let taggedEmails = result.taggedEmails || {};
-    console.log('=== BACKGROUND: Total emails in storage:', Object.keys(taggedEmails).length, '===');
-    
-    // Generate a unique ID for the email
-    const emailId = `${data.emailData.subject}-${Date.now()}`;
-    console.log('=== BACKGROUND: Generated email ID:', emailId, '===');
     
     // Create the new email data
     const newEmailData = {
-      email: data.emailData,
+      emailData: {
+        subject: data.emailData.subject,
+        body: data.emailData.body,
+        from: data.emailData.from,
+        timestamp: data.emailData.timestamp
+      },
       taggedPeople: data.taggedPeople,
-      note: data.note,
+      note: data.note || '', // Ensure note is included
       requester: userEmail,
       timestamp: Date.now(),
       status: 'pending',
       suggestions: []
     };
     
-    console.log('=== BACKGROUND: New email data:', newEmailData, '===');
+    console.log('=== BACKGROUND: Sending data to server:', {
+      url: `${SERVER_URL}/api/emails`,
+      method: 'POST',
+      data: newEmailData
+    }, '===');
     
-    // Add the new email to the storage
-    taggedEmails[emailId] = newEmailData;
+    // Send to server
+    const response = await fetch(`${SERVER_URL}/api/emails`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(newEmailData)
+    });
     
-    // Save to local storage
-    console.log('=== BACKGROUND: Saving to local storage ===');
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('=== BACKGROUND: Server error:', {
+        status: response.status,
+        statusText: response.statusText,
+        error: errorText
+      }, '===');
+      throw new Error(`Server error: ${response.status} ${response.statusText}`);
+    }
+    
+    const result = await response.json();
+    console.log('=== BACKGROUND: Server response:', result, '===');
+    
+    if (!result.success) {
+      throw new Error(result.error || 'Unknown server error');
+    }
+    
+    // Also save to local storage for caching
+    const storage = await chrome.storage.local.get(['taggedEmails']);
+    const taggedEmails = storage.taggedEmails || {};
+    taggedEmails[result.emailId] = newEmailData;
     await chrome.storage.local.set({ taggedEmails });
-    
-    // Verify the save
-    const verifyResult = await chrome.storage.local.get(['taggedEmails']);
-    console.log('=== BACKGROUND: Verification - Data in storage after save:', verifyResult, '===');
     
     // Create a notification
     chrome.notifications.create({
@@ -266,7 +255,7 @@ async function handleEmailTagging(data) {
     });
     
     console.log('=== BACKGROUND: Email tagging process completed successfully ===');
-    return { success: true, emailId };
+    return { success: true, emailId: result.emailId };
   } catch (error) {
     console.error('=== BACKGROUND: Error in email tagging process:', error, '===');
     return { success: false, error: error.message };
@@ -287,38 +276,37 @@ async function getTaggedEmails() {
       return {};
     }
     
-    // For testing, use local storage instead of the server
-    console.log('=== BACKGROUND: Using local storage for testing ===');
-    const result = await chrome.storage.local.get(['taggedEmails']);
-    console.log('=== BACKGROUND: Raw storage data:', result, '===');
+    console.log('=== BACKGROUND: Fetching emails from server ===');
+    const response = await fetch(`${SERVER_URL}/api/emails/${encodeURIComponent(userEmail)}`);
     
-    const taggedEmails = result.taggedEmails || {};
-    console.log('=== BACKGROUND: Total emails in storage:', Object.keys(taggedEmails).length, '===');
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('=== BACKGROUND: Server error:', {
+        status: response.status,
+        statusText: response.statusText,
+        error: errorText
+      }, '===');
+      throw new Error(`Server error: ${response.status} ${response.statusText}`);
+    }
     
-    // Filter emails based on whether user is requester or tagged person
-    const filteredEmails = {};
-    Object.entries(taggedEmails).forEach(([emailId, data]) => {
-      const isRequester = data.requester && data.requester.toLowerCase() === userEmail.toLowerCase();
-      const isTagged = data.taggedPeople && 
-                      data.taggedPeople.some(person => person.toLowerCase() === userEmail.toLowerCase());
-      
-      console.log('=== BACKGROUND: Checking email:', emailId, '===');
-      console.log('=== BACKGROUND: Is requester:', isRequester, '===');
-      console.log('=== BACKGROUND: Is tagged:', isTagged, '===');
-      
-      if (isRequester || isTagged) {
-        console.log('=== BACKGROUND: Including email in filtered results:', emailId, '===');
-        filteredEmails[emailId] = data;
-      } else {
-        console.log('=== BACKGROUND: Excluding email from filtered results:', emailId, '===');
-      }
-    });
+    const result = await response.json();
+    console.log('=== BACKGROUND: Server response:', result, '===');
     
-    console.log('=== BACKGROUND: Filtered emails count:', Object.keys(filteredEmails).length, '===');
-    return filteredEmails;
+    if (!result.success) {
+      throw new Error(result.error || 'Unknown server error');
+    }
+    
+    // Cache the results in local storage
+    await chrome.storage.local.set({ taggedEmails: result.emails });
+    
+    return result.emails;
   } catch (error) {
     console.error('=== BACKGROUND: Error getting tagged emails:', error, '===');
-    return {};
+    
+    // Fallback to local storage if server is unavailable
+    console.log('=== BACKGROUND: Falling back to local storage ===');
+    const storage = await chrome.storage.local.get(['taggedEmails']);
+    return storage.taggedEmails || {};
   }
 }
 
@@ -459,86 +447,4 @@ async function clearLocalStorage() {
     console.error('=== BACKGROUND: Error clearing local storage:', error, '===');
     return { success: false, error: error.message };
   }
-}
-
-// Add a test email to local storage
-async function addTestEmail() {
-  try {
-    console.log('=== BACKGROUND: Adding test email to local storage ===');
-    
-    // Clear storage first
-    await clearLocalStorage();
-    
-    // Get current storage
-    console.log('=== BACKGROUND: Getting current storage ===');
-    const result = await chrome.storage.local.get(['taggedEmails']);
-    console.log('=== BACKGROUND: Current storage result:', result, '===');
-    
-    let taggedEmails = result.taggedEmails || {};
-    console.log('=== BACKGROUND: Current taggedEmails:', taggedEmails, '===');
-    
-    // Create test email data
-    const emailId = `Test Email-${Date.now()}`;
-    console.log('=== BACKGROUND: Generated emailId:', emailId, '===');
-    
-    const testEmail = {
-      email: {
-        subject: 'Test Email',
-        body: 'This is a test email body',
-        from: '4288melheritage@gmail.com',
-        timestamp: Date.now()
-      },
-      taggedPeople: ['jchun1112@gmail.com'],
-      note: 'This is a test note',
-      requester: '4288melheritage@gmail.com',
-      timestamp: Date.now(),
-      status: 'pending',
-      suggestions: []
-    };
-    
-    console.log('=== BACKGROUND: Created test email data:', testEmail, '===');
-    
-    // Add to storage
-    taggedEmails[emailId] = testEmail;
-    console.log('=== BACKGROUND: Updated taggedEmails:', taggedEmails, '===');
-    
-    // Save to local storage
-    console.log('=== BACKGROUND: Saving to local storage ===');
-    await chrome.storage.local.set({ taggedEmails });
-    
-    // Verify the save
-    console.log('=== BACKGROUND: Verifying save ===');
-    const verifyResult = await chrome.storage.local.get(['taggedEmails']);
-    console.log('=== BACKGROUND: Verification result:', verifyResult, '===');
-    
-    console.log('=== BACKGROUND: Test email added successfully ===');
-    return { success: true, emailId };
-  } catch (error) {
-    console.error('=== BACKGROUND: Error adding test email:', error, '===');
-    return { success: false, error: error.message };
-  }
-}
-
-// Add a test email when the extension is loaded
-async function addTestEmailOnLoad() {
-  try {
-    console.log('=== BACKGROUND: Adding test email on load ===');
-    
-    // Get current storage
-    const result = await chrome.storage.local.get(['taggedEmails']);
-    console.log('=== BACKGROUND: Current storage on load:', result, '===');
-    
-    // If no emails exist, add a test email
-    if (!result.taggedEmails || Object.keys(result.taggedEmails).length === 0) {
-      console.log('=== BACKGROUND: No emails found on load, adding test email ===');
-      await addTestEmail();
-    } else {
-      console.log('=== BACKGROUND: Emails already exist on load, count:', Object.keys(result.taggedEmails).length, '===');
-    }
-  } catch (error) {
-    console.error('=== BACKGROUND: Error adding test email on load:', error, '===');
-  }
-}
-
-// Call addTestEmailOnLoad when the extension is loaded
-addTestEmailOnLoad(); 
+} 

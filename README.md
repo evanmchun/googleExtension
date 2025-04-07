@@ -1,47 +1,49 @@
 # Email Reply Helper Chrome Extension
 
-A Chrome extension that helps you get internal help on email replies in Gmail. When you receive an email and need help crafting a response, you can tag colleagues for their input. They can provide suggested replies that are only visible to you.
+A Chrome extension that helps users manage email replies and collaborate with team members.
 
 ## Features
 
-- Tag colleagues for help on specific emails
-- Receive private suggestions for email replies
-- Clean, intuitive interface integrated into Gmail
-- No forwarding or replying involved - all suggestions are private
-- Simple sidebar interface for easy access
+- Tag emails for help requests
+- Add notes to emails
+- Share emails with team members
+- Get suggestions from team members
+- Real-time updates via local server
 
-## Installation
+## Setup
 
-1. Clone this repository
-2. Open Chrome and go to `chrome://extensions/`
-3. Enable "Developer mode" in the top right
-4. Click "Load unpacked" and select the extension directory
+1. Install dependencies:
+```bash
+npm install
+```
 
-## Usage
+2. Start the local server:
+```bash
+node start-local-test.js
+```
 
-1. Open Gmail in Chrome
-2. When viewing an email you need help with, click the "Get Help" button in the toolbar
-3. Enter the email addresses of colleagues you want to tag (comma-separated)
-4. Tagged colleagues will be notified and can provide suggestions
-5. View all suggestions in the sidebar
-6. Use the suggestions to craft your reply
+3. Load the extension in Chrome:
+   - Open Chrome and go to `chrome://extensions/`
+   - Enable "Developer mode"
+   - Click "Load unpacked"
+   - Select this directory
+
+4. Configure the extension:
+   - The extension will automatically use `http://localhost:3001` as the server
+   - Make sure to grant the necessary permissions when prompted
 
 ## Development
 
-The extension is built with vanilla JavaScript and uses Chrome's Extension APIs. Key files:
+- `background.js`: Handles background tasks and server communication
+- `content.js`: Manages Gmail interface integration
+- `popup.js`: Controls the extension popup UI
+- `start-local-test.js`: Local development server
 
-- `manifest.json` - Extension configuration
-- `content.js` - Gmail integration and UI
-- `background.js` - Background processes and data management
-- `popup.html/js` - Extension popup interface
-- `styles.css` - Styling
+## Notes
 
-## Security
-
-- All data is stored locally in Chrome's storage
-- No data is sent to external servers
-- Suggestions are only visible to the original tagger
-- Data is automatically cleaned up after one week
+- The server stores data in memory (cleared on restart)
+- Emails are cached locally in Chrome storage
+- Old data is automatically cleaned up after one week
 
 ## License
 

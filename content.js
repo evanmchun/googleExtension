@@ -304,6 +304,130 @@ class GmailHelper {
     console.log('Creating sidebar...');
     this.sidebar = document.createElement('div');
     this.sidebar.className = 'email-helper-sidebar';
+    
+    // Add styles for the sidebar and its components
+    const style = document.createElement('style');
+    style.textContent = `
+      .email-helper-sidebar {
+        position: fixed;
+        top: 0;
+        right: -400px;
+        width: 400px;
+        height: 100vh;
+        background: white;
+        box-shadow: -2px 0 5px rgba(0,0,0,0.1);
+        z-index: 9999;
+        transition: right 0.3s ease;
+        padding: 20px;
+        box-sizing: border-box;
+      }
+      
+      .email-helper-sidebar.active {
+        right: 0;
+      }
+      
+      .email-helper-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+        padding-bottom: 10px;
+        border-bottom: 1px solid #eee;
+      }
+      
+      .email-helper-header h3 {
+        margin: 0;
+        color: #202124;
+        font-size: 18px;
+      }
+      
+      .close-sidebar {
+        background: none;
+        border: none;
+        font-size: 24px;
+        cursor: pointer;
+        color: #5f6368;
+        padding: 0;
+      }
+      
+      .email-helper-content {
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+      }
+      
+      .tag-section {
+        display: flex;
+        flex-direction: column;
+        gap: 15px;
+      }
+      
+      .input-group {
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+      }
+      
+      .input-group label {
+        font-size: 14px;
+        color: #5f6368;
+        font-weight: 500;
+      }
+      
+      .tag-input {
+        width: 100%;
+        padding: 8px 12px;
+        border: 1px solid #dadce0;
+        border-radius: 4px;
+        font-size: 14px;
+        color: #202124;
+      }
+      
+      .note-input {
+        width: 100%;
+        min-height: 100px;
+        padding: 8px 12px;
+        border: 1px solid #dadce0;
+        border-radius: 4px;
+        font-size: 14px;
+        color: #202124;
+        resize: vertical;
+        font-family: inherit;
+      }
+      
+      .tag-button {
+        background: #1a73e8;
+        color: white;
+        border: none;
+        padding: 10px 24px;
+        border-radius: 4px;
+        font-size: 14px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: background-color 0.2s;
+      }
+      
+      .tag-button:hover {
+        background: #1557b0;
+      }
+      
+      .suggestions-section {
+        margin-top: 20px;
+      }
+      
+      .suggestions-section h4 {
+        margin: 0 0 10px;
+        color: #202124;
+        font-size: 16px;
+      }
+      
+      .suggestions-list {
+        max-height: 300px;
+        overflow-y: auto;
+      }
+    `;
+    document.head.appendChild(style);
+    
     this.sidebar.innerHTML = `
       <div class="email-helper-header">
         <h3>Email Reply Helper</h3>
@@ -340,10 +464,10 @@ class GmailHelper {
       console.log('Sidebar closed');
     });
 
-    tagButton.addEventListener('click', (e) => {
+    tagButton.addEventListener('click', async (e) => {
       console.log('Request Help button clicked');
       e.preventDefault();
-      this.handleTagging();
+      await this.handleTagging();
     });
 
     // Debug: Add mutation observer to track sidebar visibility
@@ -362,77 +486,142 @@ class GmailHelper {
   }
 
   updateCurrentEmail() {
-    console.log('Updating current email...');
+    console.log('=== CONTENT: Starting updateCurrentEmail ===');
     
     // Try different selectors for email container
-    const emailContainer = document.querySelector('div[role="main"] .h7') || 
-                         document.querySelector('.adn.ads') ||
-                         document.querySelector('.gs');
+    const containers = {
+      'main': document.querySelector('div[role="main"] .h7'),
+      'ads': document.querySelector('.adn.ads'),
+      'gs': document.querySelector('.gs'),
+      'gt': document.querySelector('.ii.gt.adP.adO'),
+      'main_role': document.querySelector('[role="main"]')
+    };
+    
+    console.log('=== CONTENT: Email container attempts:', Object.entries(containers)
+      .map(([key, el]) => `${key}: ${!!el}`).join(', '), '===');
                          
-    console.log('Found email container:', !!emailContainer);
+    const emailContainer = containers.main || containers.ads || containers.gs || containers.gt || containers.main_role;
+                         
+    console.log('=== CONTENT: Found email container:', !!emailContainer, '===');
     if (emailContainer) {
-      console.log('Email container classes:', emailContainer.className);
+      console.log('=== CONTENT: Email container classes:', emailContainer.className, '===');
+      console.log('=== CONTENT: Email container structure:', {
+        childNodes: emailContainer.childNodes.length,
+        innerHTML: emailContainer.innerHTML.substring(0, 200) + '...' // First 200 chars
+      }, '===');
     }
     
     if (!emailContainer) {
-      console.log('No email container found');
+      console.error('=== CONTENT: No email container found, cannot proceed ===');
       return;
     }
 
-    // Try different selectors for subject
-    const subjectElement = document.querySelector('h2.hP') || 
-                          document.querySelector('.hP') ||
-                          emailContainer.querySelector('.ha h2');
+    // Try different selectors for subject with logging
+    const subjectSelectors = {
+      'h2.hP': document.querySelector('h2.hP'),
+      '.hP': document.querySelector('.hP'),
+      'ha h2': emailContainer.querySelector('.ha h2'),
+      'thread h2': document.querySelector('[data-thread-perm-id] h2')
+    };
+    
+    console.log('=== CONTENT: Subject element attempts:', Object.entries(subjectSelectors)
+      .map(([key, el]) => `${key}: ${!!el}`).join(', '), '===');
+    
+    const subjectElement = subjectSelectors['h2.hP'] || subjectSelectors['.hP'] || 
+                          subjectSelectors['ha h2'] || subjectSelectors['thread h2'];
                           
-    // Try different selectors for body
-    const bodyElement = emailContainer.querySelector('.a3s.aiL') ||
-                       emailContainer.querySelector('.a3s') ||
-                       emailContainer.querySelector('.ii.gt');
+    // Try different selectors for body with logging
+    const bodySelectors = {
+      'aiL': emailContainer.querySelector('.a3s.aiL'),
+      'a3s': emailContainer.querySelector('.a3s'),
+      'gt': emailContainer.querySelector('.ii.gt'),
+      'msg': emailContainer.querySelector('.a3s.aiL.msg'),
+      'thread': emailContainer.querySelector('[data-message-id] .ii.gt')
+    };
+    
+    console.log('=== CONTENT: Body element attempts:', Object.entries(bodySelectors)
+      .map(([key, el]) => `${key}: ${!!el}`).join(', '), '===');
                        
-    // Try different selectors for sender
-    const fromElement = emailContainer.querySelector('.gD') ||
-                       emailContainer.querySelector('.g2') ||
-                       emailContainer.querySelector('.from');
+    const bodyElement = bodySelectors.aiL || bodySelectors.a3s || bodySelectors.gt || 
+                       bodySelectors.msg || bodySelectors.thread;
+                       
+    // Try different selectors for sender with logging
+    const fromSelectors = {
+      'gD container': emailContainer.querySelector('.gD'),
+      'g2 container': emailContainer.querySelector('.g2'),
+      'from container': emailContainer.querySelector('.from'),
+      'gD document': document.querySelector('.gD')
+    };
+    
+    console.log('=== CONTENT: From element attempts:', Object.entries(fromSelectors)
+      .map(([key, el]) => `${key}: ${!!el}`).join(', '), '===');
 
-    console.log('Found elements:', {
+    const fromElement = fromSelectors['gD container'] || fromSelectors['g2 container'] || 
+                       fromSelectors['from container'] || fromSelectors['gD document'];
+
+    console.log('=== CONTENT: Found elements:', {
       subject: !!subjectElement,
       body: !!bodyElement,
       from: !!fromElement
-    });
+    }, '===');
 
     if (subjectElement) {
-      console.log('Subject element text:', subjectElement.textContent);
+      console.log('=== CONTENT: Subject element:', {
+        text: subjectElement.textContent,
+        html: subjectElement.innerHTML,
+        classes: subjectElement.className
+      }, '===');
+    } else {
+      console.error('=== CONTENT: Subject element not found ===');
     }
+    
+    if (bodyElement) {
+      console.log('=== CONTENT: Body element:', {
+        text: bodyElement.textContent.substring(0, 100) + '...', // First 100 chars
+        classes: bodyElement.className
+      }, '===');
+    } else {
+      console.error('=== CONTENT: Body element not found ===');
+    }
+    
     if (fromElement) {
-      console.log('From element:', {
+      console.log('=== CONTENT: From element:', {
         email: fromElement.getAttribute('email'),
-        text: fromElement.textContent
-      });
+        text: fromElement.textContent,
+        classes: fromElement.className
+      }, '===');
+    } else {
+      console.error('=== CONTENT: From element not found ===');
     }
 
     if (!subjectElement || !bodyElement) {
-      console.log('Missing required elements');
+      console.error('=== CONTENT: Missing required elements, cannot create email data ===');
       return;
     }
 
     const emailData = {
       subject: subjectElement.textContent.trim(),
-      body: bodyElement.textContent.trim(),
+      body: bodyElement.innerHTML.trim(), // Store HTML content to preserve formatting
       from: fromElement ? fromElement.getAttribute('email') || fromElement.textContent.trim() : 'unknown',
       timestamp: Date.now()
     };
 
-    console.log('Constructed email data:', emailData);
+    console.log('=== CONTENT: Constructed email data:', {
+      subject: emailData.subject,
+      from: emailData.from,
+      bodyLength: emailData.body.length,
+      timestamp: emailData.timestamp
+    }, '===');
 
     // Only update if email has changed
     const emailKey = `${emailData.subject}-${emailData.from}`;
     if (this.lastProcessedEmail !== emailKey) {
-      console.log('Email changed, updating current email');
+      console.log('=== CONTENT: Email changed, updating current email ===');
       this.currentEmail = emailData;
       this.lastProcessedEmail = emailKey;
-      console.log('Current email updated:', this.currentEmail);
+      console.log('=== CONTENT: Current email updated with key:', emailKey, '===');
     } else {
-      console.log('Email unchanged, keeping current data:', this.currentEmail);
+      console.log('=== CONTENT: Email unchanged, keeping current data with key:', emailKey, '===');
     }
   }
 
@@ -527,26 +716,37 @@ class GmailHelper {
   }
 
   async handleTagging() {
-    console.log('handleTagging called');
+    console.log('=== CONTENT: handleTagging called ===');
     const tagInput = this.sidebar.querySelector('#tag-input');
     const noteInput = this.sidebar.querySelector('#note-input');
     
-    console.log('Current email state:', this.currentEmail);
-    console.log('Input values:', {
-      tagInput: tagInput.value,
-      noteInput: noteInput.value
-    });
+    console.log('=== CONTENT: Input values:', {
+      tagInput: tagInput?.value || 'not found',
+      noteInput: noteInput?.value || 'not found'
+    }, '===');
+    
+    if (!tagInput || !noteInput) {
+      console.error('=== CONTENT: Could not find input elements ===');
+      alert('Error: Could not find input fields');
+      return;
+    }
     
     const taggedPeople = tagInput.value.split(',').map(email => email.trim()).filter(email => email);
+    const note = noteInput.value.trim();
+    
+    console.log('=== CONTENT: Processed inputs:', {
+      taggedPeople,
+      note
+    }, '===');
     
     if (taggedPeople.length === 0) {
-      console.log('No email addresses entered');
+      console.log('=== CONTENT: No email addresses entered ===');
       alert('Please enter at least one email address');
       return;
     }
 
     if (!this.currentEmail) {
-      console.log('No email selected/captured');
+      console.log('=== CONTENT: No email selected/captured ===');
       alert('No email selected');
       return;
     }
@@ -555,20 +755,20 @@ class GmailHelper {
       const requestData = {
         emailData: this.currentEmail,
         taggedPeople,
-        note: noteInput.value.trim()
+        note: note // Ensure note is included in request data
       };
       
-      console.log('Preparing tag request with data:', requestData);
+      console.log('=== CONTENT: Preparing tag request with data:', requestData, '===');
 
       const response = await this.sendMessage({
         type: 'TAG_EMAIL',
         data: requestData
       });
 
-      console.log('Received tag response:', response);
+      console.log('=== CONTENT: Received tag response:', response, '===');
 
       if (response && response.success) {
-        console.log('Tag request successful');
+        console.log('=== CONTENT: Tag request successful ===');
         // Show success message
         const notification = document.createElement('div');
         notification.className = 'email-helper-notification';
@@ -645,7 +845,7 @@ class GmailHelper {
         tagInput.value = '';
         noteInput.value = '';
         this.sidebar.classList.remove('active');
-        console.log('Inputs cleared and sidebar closed');
+        console.log('=== CONTENT: Inputs cleared and sidebar closed ===');
 
         // Auto-close notification after 8 seconds
         setTimeout(() => {
@@ -654,11 +854,11 @@ class GmailHelper {
           }
         }, 8000);
       } else {
-        console.log('Tag request failed:', response?.error || 'Unknown error');
+        console.log('=== CONTENT: Tag request failed:', response?.error || 'Unknown error', '===');
         throw new Error(response?.error || 'Failed to send help request');
       }
     } catch (error) {
-      console.error('Error in handleTagging:', error);
+      console.error('=== CONTENT: Error in handleTagging:', error, '===');
       this.showError('Failed to send help request. Please refresh the page and try again.');
     }
   }
