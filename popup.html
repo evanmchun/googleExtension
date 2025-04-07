@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Email Reply Helper</title>
+  <style>
+    body {
+      width: 400px;
+      padding: 16px;
+      font-family: 'Google Sans', Arial, sans-serif;
+    }
+    .section {
+      margin-bottom: 20px;
+    }
+    .request-card {
+      border: 1px solid #dadce0;
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 12px;
+    }
+    .request-header {
+      font-weight: 500;
+      margin-bottom: 8px;
+    }
+    .request-meta {
+      color: #5f6368;
+      font-size: 12px;
+      margin-bottom: 8px;
+    }
+    .request-note {
+      background: #f8f9fa;
+      padding: 8px;
+      border-radius: 4px;
+      margin-bottom: 8px;
+    }
+    .suggestions-list {
+      margin-top: 12px;
+    }
+    .suggestion {
+      border-left: 3px solid #1a73e8;
+      padding-left: 8px;
+      margin-bottom: 8px;
+    }
+    .no-requests {
+      color: #5f6368;
+      text-align: center;
+      padding: 20px;
+    }
+    .status-badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-size: 12px;
+      margin-left: 8px;
+    }
+    .status-pending {
+      background: #fce8e6;
+      color: #d93025;
+    }
+    .status-in-progress {
+      background: #fef7e0;
+      color: #ea8600;
+    }
+    .status-completed {
+      background: #e6f4ea;
+      color: #137333;
+    }
+  </style>
+</head>
+<body>
+  <div id="requests-section" class="section">
+    <h3>Help Requests</h3>
+    <div id="requests-list">
+      <!-- Requests will be populated here -->
+      <div class="no-requests">Loading requests...</div>
+    </div>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html> 

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="128" height="128" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background circle -->
+  <circle cx="64" cy="64" r="60" fill="#1a73e8"/>
+  
+  <!-- Email icon -->
+  <path d="M32 48v32c0 4.4 3.6 8 8 8h48c4.4 0 8-3.6 8-8V48c0-4.4-3.6-8-8-8H40c-4.4 0-8 3.6-8 8zm8 0l24 16 24-16v4L64 68 40 52v-4z" fill="white"/>
+  
+  <!-- Help symbol -->
+  <circle cx="96" cy="96" r="24" fill="#34a853"/>
+  <path d="M96 80c-4.4 0-8 3.6-8 8h6c0-1.1.9-2 2-2s2 .9 2 2c0 2-3 1.8-3 6v2h6v-2c0-2.2 3-2.5 3-6 0-4.4-3.6-8-8-8zm-2 20v6h4v-6h-4z" fill="white"/>
+</svg> 

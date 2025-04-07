@@ -1,31 +1,66 @@
 // Handle extension installation
-chrome.runtime.onInstalled.addListener(() => {
+chrome.runtime.onInstalled.addListener(async () => {
   console.log('Email Reply Helper installed');
-  // Initialize storage
-  chrome.storage.local.set({
-    taggedEmails: {},
-    userEmail: '',
-    helperSettings: {
-      notificationMethod: 'extension'
-    }
-  });
+  
+  // Check if storage already exists before initializing
+  const existingData = await chrome.storage.local.get(['taggedEmails']);
+  console.log('Existing storage data:', existingData);
+  
+  if (!existingData.taggedEmails) {
+    console.log('No existing data found, initializing storage...');
+    await initializeStorage();
+  } else {
+    console.log('Existing data found, preserving storage:', existingData.taggedEmails);
+  }
 });
+
+// Initialize storage
+async function initializeStorage() {
+  try {
+    console.log('Initializing storage...');
+    const initialData = {
+      taggedEmails: {},
+      userEmail: '',
+      helperSettings: {
+        notificationMethod: 'extension'
+      }
+    };
+    
+    await chrome.storage.local.set(initialData);
+    console.log('Storage initialized with:', initialData);
+    
+    // Verify initialization
+    const verifyResult = await chrome.storage.local.get(['taggedEmails']);
+    console.log('Verification - Storage after initialization:', verifyResult);
+    
+    return verifyResult;
+  } catch (error) {
+    console.error('Error initializing storage:', error);
+    throw error;
+  }
+}
 
 // Listen for messages from content script
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  console.log('Received message:', request.type);
+  console.log('Received message:', request.type, request.data);
+  
+  if (request.type === 'TEST_CONNECTION') {
+    sendResponse({ success: true, message: 'Connection established' });
+    return false;
+  }
   
   if (request.type === 'TAG_EMAIL') {
+    console.log('Processing TAG_EMAIL request with data:', request.data);
     handleEmailTagging(request.data)
       .then(response => {
-        console.log('Sending response:', response);
+        console.log('TAG_EMAIL processing complete. Response:', response);
         sendResponse(response);
       })
       .catch(error => {
         console.error('Error in TAG_EMAIL:', error);
         sendResponse({ success: false, error: error.message });
       });
-    return true; // Keep the message channel open for async response
+    return true;
   } 
   else if (request.type === 'ADD_SUGGESTION') {
     handleSuggestion(request.data)
@@ -35,100 +70,195 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   } 
   else if (request.type === 'GET_USER_EMAIL') {
     getUserEmail()
-      .then(email => sendResponse({ email }))
+      .then(email => {
+        console.log('Returning user email:', email);
+        sendResponse({ email });
+      })
       .catch(error => sendResponse({ error: error.message }));
     return true;
   }
+  else if (request.type === 'GET_TAGGED_EMAILS') {
+    console.log('Processing GET_TAGGED_EMAILS request');
+    getTaggedEmails()
+      .then(emails => {
+        console.log('Retrieved tagged emails:', emails);
+        sendResponse({ success: true, emails });
+      })
+      .catch(error => {
+        console.error('Error getting tagged emails:', error);
+        sendResponse({ success: false, error: error.message });
+      });
+    return true;
+  }
+  
+  return false;
 });
 
 // Get user's email using Chrome identity API
 async function getUserEmail() {
   try {
-    // First check if we have it stored
+    // First try to get from storage
     const result = await chrome.storage.local.get(['userEmail']);
     if (result.userEmail) {
+      console.log('Retrieved email from storage:', result.userEmail);
       return result.userEmail;
     }
 
-    // Try to get from identity API
-    const info = await chrome.identity.getProfileUserInfo();
-    if (info.email) {
-      // Store it for future use
-      await chrome.storage.local.set({ userEmail: info.email });
-      return info.email;
-    }
+    // Get auth token
+    const token = await new Promise((resolve, reject) => {
+      chrome.identity.getAuthToken({ interactive: true }, (token) => {
+        if (chrome.runtime.lastError) {
+          console.error('Error getting auth token:', chrome.runtime.lastError);
+          reject(chrome.runtime.lastError);
+        } else {
+          resolve(token);
+        }
+      });
+    });
 
-    // If we can't get the email, use the domain from the current tab
-    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-    const currentTab = tabs[0];
-    if (currentTab && currentTab.url && currentTab.url.includes('mail.google.com')) {
-      // Extract email from Gmail URL or interface
-      const emailMatch = currentTab.url.match(/([a-zA-Z0-9._-]+@[a-zA-Z0-9._-]+\.[a-zA-Z0-9._-]+)/gi);
-      if (emailMatch && emailMatch[0]) {
-        const email = emailMatch[0];
-        await chrome.storage.local.set({ userEmail: email });
-        return email;
+    // Get user info from Google
+    const response = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+      headers: {
+        Authorization: `Bearer ${token}`
       }
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to fetch user info');
     }
 
-    // If all else fails, prompt user to enter their email
-    return null;
+    const data = await response.json();
+    const email = data.email;
+
+    // Store email for future use
+    if (email) {
+      console.log('Storing user email:', email);
+      await chrome.storage.local.set({ userEmail: email });
+    }
+
+    return email;
   } catch (error) {
     console.error('Error getting user email:', error);
-    return null;
+    
+    // Fallback to getProfileUserInfo
+    try {
+      const userInfo = await chrome.identity.getProfileUserInfo();
+      console.log('Got user info from getProfileUserInfo:', userInfo);
+      if (userInfo.email) {
+        await chrome.storage.local.set({ userEmail: userInfo.email });
+        return userInfo.email;
+      }
+    } catch (fallbackError) {
+      console.error('Fallback error:', fallbackError);
+    }
+    
+    return '';
   }
 }
 
 // Handle email tagging
 async function handleEmailTagging(data) {
-  console.log('Handling email tagging:', data);
+  console.log('Starting email tagging process...', data);
   const { emailData, taggedPeople, note } = data;
   
   try {
     // Get user's email
     const userEmail = await getUserEmail();
-    if (!userEmail) {
-      // Instead of throwing error, use the from field of the email
-      const requesterEmail = emailData.from || 'unknown';
-      console.log('Using email from field as requester:', requesterEmail);
-      
-      // Store the tagged email data
-      const taggedEmails = await chrome.storage.local.get(['taggedEmails']).then(result => result.taggedEmails || {});
-      const emailId = emailData.subject || new Date().toISOString();
-      
-      taggedEmails[emailId] = {
-        email: emailData,
-        taggedPeople,
-        note,
-        requester: requesterEmail,
-        timestamp: Date.now(),
-        suggestions: []
-      };
-
-      await chrome.storage.local.set({ taggedEmails });
-      console.log('Email tagged successfully');
-      return { success: true, emailId };
-    }
-
-    // Normal flow with user email
-    const taggedEmails = await chrome.storage.local.get(['taggedEmails']).then(result => result.taggedEmails || {});
-    const emailId = emailData.subject || new Date().toISOString();
+    console.log('User email retrieved:', userEmail);
+    const requesterEmail = userEmail || emailData.from || 'unknown';
     
-    taggedEmails[emailId] = {
+    // Store the tagged email data
+    console.log('Getting current tagged emails from storage...');
+    const result = await chrome.storage.local.get(['taggedEmails']);
+    let taggedEmails = result.taggedEmails;
+    
+    // Initialize if undefined
+    if (!taggedEmails) {
+      console.log('Tagged emails storage was undefined, initializing...');
+      taggedEmails = {};
+    }
+    
+    console.log('Current tagged emails:', taggedEmails);
+    
+    const emailId = `${emailData.subject}-${Date.now()}`; // Make ID unique
+    console.log('Generated email ID:', emailId);
+    
+    // Store with more detailed information
+    const newEmailData = {
       email: emailData,
       taggedPeople,
       note,
-      requester: userEmail,
+      requester: requesterEmail,
       timestamp: Date.now(),
-      suggestions: []
+      status: 'pending',
+      suggestions: [],
+      threadId: emailData.threadId || null
     };
-
+    
+    console.log('New email data to be stored:', newEmailData);
+    
+    // Update the storage object
+    taggedEmails[emailId] = newEmailData;
+    
+    // Save to storage
+    console.log('Saving to storage:', { taggedEmails });
     await chrome.storage.local.set({ taggedEmails });
-    console.log('Email tagged successfully');
+    
+    // Verify the save
+    const verifyResult = await chrome.storage.local.get(['taggedEmails']);
+    console.log('Verification - Data in storage after save:', verifyResult.taggedEmails);
+    
+    if (!verifyResult.taggedEmails || !verifyResult.taggedEmails[emailId]) {
+      throw new Error('Failed to save email data - verification failed');
+    }
+
+    // Show notification to confirm request was saved
+    chrome.notifications.create({
+      type: 'basic',
+      iconUrl: 'icon.png',
+      title: 'Help Request Saved',
+      message: `Your request has been saved and will be visible to ${taggedPeople.join(', ')}`
+    });
+
     return { success: true, emailId };
   } catch (error) {
     console.error('Error in handleEmailTagging:', error);
     return { success: false, error: error.message };
+  }
+}
+
+// Get all tagged emails
+async function getTaggedEmails() {
+  console.log('Getting tagged emails...');
+  try {
+    const result = await chrome.storage.local.get(['taggedEmails']);
+    console.log('Raw storage data:', result);
+    
+    const taggedEmails = result.taggedEmails || {};
+    console.log('Tagged emails from storage:', taggedEmails);
+    
+    const userEmail = await getUserEmail();
+    console.log('Current user email for filtering:', userEmail);
+    
+    // Filter emails based on whether user is requester or tagged person
+    const filteredEmails = {};
+    Object.entries(taggedEmails).forEach(([emailId, data]) => {
+      console.log('Checking email:', emailId);
+      console.log('Email data:', data);
+      console.log('Is user requester?', data.requester === userEmail);
+      console.log('Is user tagged?', data.taggedPeople.includes(userEmail));
+      
+      if (data.requester === userEmail || data.taggedPeople.includes(userEmail)) {
+        console.log('Including email in filtered results');
+        filteredEmails[emailId] = data;
+      }
+    });
+    
+    console.log('Final filtered emails:', filteredEmails);
+    return filteredEmails;
+  } catch (error) {
+    console.error('Error getting tagged emails:', error);
+    throw error;
   }
 }
 
@@ -149,6 +279,7 @@ async function handleSuggestion(data) {
       });
       
       await chrome.storage.local.set({ taggedEmails });
+      console.log('Suggestion added. Current storage:', taggedEmails);
       
       // Show notification in extension
       await chrome.notifications.create({
@@ -183,6 +314,7 @@ setInterval(async () => {
     });
     
     await chrome.storage.local.set({ taggedEmails });
+    console.log('Cleaned up old data. Current storage:', taggedEmails);
   } catch (error) {
     console.error('Error cleaning up old data:', error);
   }

@@ -44,6 +44,7 @@
   align-items: center;
   justify-content: center;
   border-radius: 50%;
+  transition: background-color 0.2s ease;
 }
 
 .close-sidebar:hover {
@@ -52,6 +53,7 @@
 
 .email-helper-content {
   padding: 16px;
+  height: calc(100vh - 65px);
 }
 
 .tag-section {
