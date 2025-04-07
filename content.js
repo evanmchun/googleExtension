@@ -31,10 +31,30 @@ class GmailHelper {
       console.log('Setting up email view detection...');
       this.checkForEmailView();
       
-      // Test connection with background script
+      // Test connection with background script with retries
       console.log('Testing connection with background script...');
-      const testResponse = await this.sendMessage({ type: 'TEST_CONNECTION' });
-      console.log('Connection test response:', testResponse);
+      let testResponse = null;
+      let retryCount = 0;
+      const maxRetries = 3;
+      
+      while (retryCount < maxRetries) {
+        try {
+          testResponse = await this.sendMessage({ type: 'TEST_CONNECTION' });
+          console.log('Connection test response:', testResponse);
+          break;
+        } catch (error) {
+          retryCount++;
+          console.log(`Connection test attempt ${retryCount} failed:`, error);
+          if (retryCount < maxRetries) {
+            console.log('Retrying in 1 second...');
+            await new Promise(resolve => setTimeout(resolve, 1000));
+          }
+        }
+      }
+      
+      if (!testResponse) {
+        console.warn('Could not establish connection with background script after retries');
+      }
       
       // Force initial button check
       console.log('Forcing initial button check...');
@@ -488,140 +508,125 @@ class GmailHelper {
   updateCurrentEmail() {
     console.log('=== CONTENT: Starting updateCurrentEmail ===');
     
-    // Try different selectors for email container
-    const containers = {
-      'main': document.querySelector('div[role="main"] .h7'),
-      'ads': document.querySelector('.adn.ads'),
-      'gs': document.querySelector('.gs'),
-      'gt': document.querySelector('.ii.gt.adP.adO'),
-      'main_role': document.querySelector('[role="main"]')
-    };
-    
-    console.log('=== CONTENT: Email container attempts:', Object.entries(containers)
-      .map(([key, el]) => `${key}: ${!!el}`).join(', '), '===');
-                         
-    const emailContainer = containers.main || containers.ads || containers.gs || containers.gt || containers.main_role;
-                         
-    console.log('=== CONTENT: Found email container:', !!emailContainer, '===');
-    if (emailContainer) {
+    try {
+      // Find the email container
+      const emailContainer = this.findEmailContainer();
+      console.log('=== CONTENT: Email container attempts:', {
+        main: !!document.querySelector('.h7'),
+        ads: !!document.querySelector('.ads'),
+        gs: !!document.querySelector('.gs'),
+        gt: !!document.querySelector('.gt'),
+        main_role: !!document.querySelector('div[role="main"]')
+      }, '===');
+      
+      if (!emailContainer) {
+        console.log('=== CONTENT: No email container found ===');
+        return false;
+      }
+      
+      console.log('=== CONTENT: Found email container:', !!emailContainer, '===');
       console.log('=== CONTENT: Email container classes:', emailContainer.className, '===');
       console.log('=== CONTENT: Email container structure:', {
         childNodes: emailContainer.childNodes.length,
-        innerHTML: emailContainer.innerHTML.substring(0, 200) + '...' // First 200 chars
+        innerHTML: emailContainer.innerHTML.substring(0, 100) + '...'
       }, '===');
-    }
-    
-    if (!emailContainer) {
-      console.error('=== CONTENT: No email container found, cannot proceed ===');
-      return;
-    }
-
-    // Try different selectors for subject with logging
-    const subjectSelectors = {
-      'h2.hP': document.querySelector('h2.hP'),
-      '.hP': document.querySelector('.hP'),
-      'ha h2': emailContainer.querySelector('.ha h2'),
-      'thread h2': document.querySelector('[data-thread-perm-id] h2')
-    };
-    
-    console.log('=== CONTENT: Subject element attempts:', Object.entries(subjectSelectors)
-      .map(([key, el]) => `${key}: ${!!el}`).join(', '), '===');
-    
-    const subjectElement = subjectSelectors['h2.hP'] || subjectSelectors['.hP'] || 
-                          subjectSelectors['ha h2'] || subjectSelectors['thread h2'];
-                          
-    // Try different selectors for body with logging
-    const bodySelectors = {
-      'aiL': emailContainer.querySelector('.a3s.aiL'),
-      'a3s': emailContainer.querySelector('.a3s'),
-      'gt': emailContainer.querySelector('.ii.gt'),
-      'msg': emailContainer.querySelector('.a3s.aiL.msg'),
-      'thread': emailContainer.querySelector('[data-message-id] .ii.gt')
-    };
-    
-    console.log('=== CONTENT: Body element attempts:', Object.entries(bodySelectors)
-      .map(([key, el]) => `${key}: ${!!el}`).join(', '), '===');
-                       
-    const bodyElement = bodySelectors.aiL || bodySelectors.a3s || bodySelectors.gt || 
-                       bodySelectors.msg || bodySelectors.thread;
-                       
-    // Try different selectors for sender with logging
-    const fromSelectors = {
-      'gD container': emailContainer.querySelector('.gD'),
-      'g2 container': emailContainer.querySelector('.g2'),
-      'from container': emailContainer.querySelector('.from'),
-      'gD document': document.querySelector('.gD')
-    };
-    
-    console.log('=== CONTENT: From element attempts:', Object.entries(fromSelectors)
-      .map(([key, el]) => `${key}: ${!!el}`).join(', '), '===');
-
-    const fromElement = fromSelectors['gD container'] || fromSelectors['g2 container'] || 
-                       fromSelectors['from container'] || fromSelectors['gD document'];
-
-    console.log('=== CONTENT: Found elements:', {
-      subject: !!subjectElement,
-      body: !!bodyElement,
-      from: !!fromElement
-    }, '===');
-
-    if (subjectElement) {
+      
+      // Find subject, body, and from elements
+      const subjectElement = this.findSubjectElement(emailContainer);
+      const bodyElement = this.findBodyElement(emailContainer);
+      const fromElement = this.findFromElement(emailContainer);
+      
+      console.log('=== CONTENT: Subject element attempts:', {
+        'h2.hP': !!document.querySelector('h2.hP'),
+        '.hP': !!document.querySelector('.hP'),
+        'ha h2': !!document.querySelector('.ha h2'),
+        'thread h2': !!document.querySelector('.thread h2')
+      }, '===');
+      
+      console.log('=== CONTENT: Body element attempts:', {
+        'aiL': !!document.querySelector('.aiL'),
+        'a3s': !!document.querySelector('.a3s'),
+        'gt': !!document.querySelector('.gt'),
+        'msg': !!document.querySelector('.msg'),
+        'thread': !!document.querySelector('.thread')
+      }, '===');
+      
+      console.log('=== CONTENT: From element attempts:', {
+        'gD container': !!emailContainer.querySelector('.gD'),
+        'g2 container': !!emailContainer.querySelector('.g2'),
+        'from container': !!emailContainer.querySelector('.from'),
+        'gD document': !!document.querySelector('.gD')
+      }, '===');
+      
+      console.log('=== CONTENT: Found elements:', {
+        subject: !!subjectElement,
+        body: !!bodyElement,
+        from: !!fromElement
+      }, '===');
+      
+      if (!subjectElement || !bodyElement || !fromElement) {
+        console.log('=== CONTENT: Missing required elements ===');
+        return false;
+      }
+      
+      // Get subject text
+      const subject = subjectElement.textContent.trim();
       console.log('=== CONTENT: Subject element:', {
-        text: subjectElement.textContent,
+        text: subject,
         html: subjectElement.innerHTML,
         classes: subjectElement.className
       }, '===');
-    } else {
-      console.error('=== CONTENT: Subject element not found ===');
-    }
-    
-    if (bodyElement) {
+      
+      // Get body text
+      let body = bodyElement.textContent.trim();
+      // Trim body to max 10000 characters
+      if (body.length > 10000) {
+        body = body.substring(0, 10000) + '... [Content truncated]';
+      }
       console.log('=== CONTENT: Body element:', {
-        text: bodyElement.textContent.substring(0, 100) + '...', // First 100 chars
+        text: body.substring(0, 100) + '...',
         classes: bodyElement.className
       }, '===');
-    } else {
-      console.error('=== CONTENT: Body element not found ===');
-    }
-    
-    if (fromElement) {
+      
+      // Get sender info
+      const fromEmail = fromElement.getAttribute('email') || fromElement.textContent.trim();
       console.log('=== CONTENT: From element:', {
-        email: fromElement.getAttribute('email'),
-        text: fromElement.textContent,
+        email: fromEmail,
+        text: fromElement.textContent.trim(),
         classes: fromElement.className
       }, '===');
-    } else {
-      console.error('=== CONTENT: From element not found ===');
-    }
-
-    if (!subjectElement || !bodyElement) {
-      console.error('=== CONTENT: Missing required elements, cannot create email data ===');
-      return;
-    }
-
-    const emailData = {
-      subject: subjectElement.textContent.trim(),
-      body: bodyElement.innerHTML.trim(), // Store HTML content to preserve formatting
-      from: fromElement ? fromElement.getAttribute('email') || fromElement.textContent.trim() : 'unknown',
-      timestamp: Date.now()
-    };
-
-    console.log('=== CONTENT: Constructed email data:', {
-      subject: emailData.subject,
-      from: emailData.from,
-      bodyLength: emailData.body.length,
-      timestamp: emailData.timestamp
-    }, '===');
-
-    // Only update if email has changed
-    const emailKey = `${emailData.subject}-${emailData.from}`;
-    if (this.lastProcessedEmail !== emailKey) {
+      
+      // Create email data object
+      const emailData = {
+        subject,
+        body,
+        from: fromEmail,
+        timestamp: Date.now()
+      };
+      
+      console.log('=== CONTENT: Constructed email data:', {
+        subject: emailData.subject,
+        from: emailData.from,
+        bodyLength: emailData.body.length,
+        timestamp: emailData.timestamp
+      }, '===');
+      
+      // Check if email has changed
+      const emailKey = `${subject}-${fromEmail}`;
+      if (this.currentEmail && this.currentEmailKey === emailKey) {
+        console.log('=== CONTENT: Email unchanged, keeping current data with key:', emailKey, '===');
+        return false;
+      }
+      
       console.log('=== CONTENT: Email changed, updating current email ===');
       this.currentEmail = emailData;
-      this.lastProcessedEmail = emailKey;
+      this.currentEmailKey = emailKey;
       console.log('=== CONTENT: Current email updated with key:', emailKey, '===');
-    } else {
-      console.log('=== CONTENT: Email unchanged, keeping current data with key:', emailKey, '===');
+      
+      return true;
+    } catch (error) {
+      console.error('=== CONTENT: Error in updateCurrentEmail:', error, '===');
+      return false;
     }
   }
 
@@ -861,6 +866,183 @@ class GmailHelper {
       console.error('=== CONTENT: Error in handleTagging:', error, '===');
       this.showError('Failed to send help request. Please refresh the page and try again.');
     }
+  }
+
+  findEmailContainer() {
+    // Try different selectors used by Gmail for email containers
+    const containers = [
+      document.querySelector('div[role="main"] .h7'),
+      document.querySelector('.ade'),
+      document.querySelector('.BltHke'),
+      document.querySelector('.adn.ads'),
+      document.querySelector('.gs')
+    ];
+    
+    // Return the first valid container found
+    return containers.find(container => container !== null) || null;
+  }
+
+  findSubjectElement(container) {
+    console.log('=== CONTENT: Finding subject element in container ===');
+    
+    // Try all possible selectors
+    const selectors = [
+      'h2.hP',
+      '.hP',
+      '.ha h2',
+      '.thread h2',
+      'h2[role="heading"]',
+      '.h2',
+      '.subject',
+      '[data-thread-perm-id] h2',
+      '.gD h2',
+      '.g2 h2',
+      '.thread-subject',
+      '.thread-title',
+      // Add more Gmail-specific selectors
+      '.h2[role="heading"]',
+      '.h2.hP',
+      '.h2.thread-subject',
+      '.h2.thread-title',
+      '.h2.subject',
+      '.h2[data-thread-perm-id]',
+      '.h2.gD',
+      '.h2.g2',
+      // Add selectors for newer Gmail versions
+      'h2[data-thread-perm-id]',
+      'h2[role="heading"][data-thread-perm-id]',
+      '.h2[role="heading"][data-thread-perm-id]',
+      '.h2[role="heading"].hP',
+      '.h2[role="heading"].thread-subject',
+      '.h2[role="heading"].thread-title',
+      '.h2[role="heading"].subject',
+      '.h2[role="heading"].gD',
+      '.h2[role="heading"].g2',
+      // Add more general selectors
+      'h2',
+      '[role="heading"]',
+      '.subject',
+      '.thread-subject',
+      '.thread-title',
+      '.email-subject',
+      '.email-title',
+      '.email-header h2',
+      '.email-header [role="heading"]',
+      '.email-header .subject',
+      '.email-header .thread-subject',
+      '.email-header .thread-title',
+      '.email-header .email-subject',
+      '.email-header .email-title',
+      '.email-header h2[role="heading"]',
+      '.email-header .h2[role="heading"]',
+      '.email-header .h2',
+      '.email-header [role="heading"]',
+      '.email-header .subject',
+      '.email-header .thread-subject',
+      '.email-header .thread-title',
+      '.email-header .email-subject',
+      '.email-header .email-title'
+    ];
+    
+    // Log all potential subject elements found
+    selectors.forEach(selector => {
+      const elements = container.querySelectorAll(selector);
+      if (elements.length > 0) {
+        console.log(`=== CONTENT: Found ${elements.length} elements with selector "${selector}" ===`);
+        elements.forEach((element, index) => {
+          console.log(`=== CONTENT: Element ${index + 1}:`, {
+            text: element.textContent,
+            html: element.innerHTML,
+            classes: element.className,
+            attributes: Array.from(element.attributes).map(attr => `${attr.name}="${attr.value}"`).join(', ')
+          }, '===');
+        });
+      }
+    });
+    
+    // Try to find the element
+    for (const selector of selectors) {
+      const element = container.querySelector(selector);
+      if (element && element.textContent.trim()) {
+        console.log(`=== CONTENT: Using subject element found with selector "${selector}" ===`);
+        return element;
+      }
+    }
+    
+    // If no element found with selectors, try to find any h2 that looks like a subject
+    const allH2s = container.querySelectorAll('h2');
+    console.log(`=== CONTENT: Found ${allH2s.length} total h2 elements ===`);
+    
+    for (const h2 of allH2s) {
+      // Check if this h2 looks like a subject (contains text, not empty, etc)
+      if (h2.textContent.trim() && !h2.querySelector('h2')) {
+        console.log('=== CONTENT: Found potential subject h2:', {
+          text: h2.textContent,
+          html: h2.innerHTML,
+          classes: h2.className,
+          attributes: Array.from(h2.attributes).map(attr => `${attr.name}="${attr.value}"`).join(', ')
+        }, '===');
+        return h2;
+      }
+    }
+    
+    // If still no subject found, try to find any element with role="heading"
+    const headings = container.querySelectorAll('[role="heading"]');
+    console.log(`=== CONTENT: Found ${headings.length} elements with role="heading" ===`);
+    
+    for (const heading of headings) {
+      if (heading.textContent.trim()) {
+        console.log('=== CONTENT: Found potential subject heading:', {
+          text: heading.textContent,
+          html: heading.innerHTML,
+          classes: heading.className,
+          attributes: Array.from(heading.attributes).map(attr => `${attr.name}="${attr.value}"`).join(', ')
+        }, '===');
+        return heading;
+      }
+    }
+    
+    // If still no subject found, try to find any element that looks like a subject
+    const allElements = container.querySelectorAll('*');
+    console.log(`=== CONTENT: Found ${allElements.length} total elements ===`);
+    
+    for (const element of allElements) {
+      // Check if this element looks like a subject (contains text, not empty, etc)
+      if (element.textContent.trim() && 
+          (element.tagName === 'H2' || 
+           element.tagName === 'H1' || 
+           element.tagName === 'H3' || 
+           element.getAttribute('role') === 'heading' ||
+           element.className.includes('subject') ||
+           element.className.includes('title'))) {
+        console.log('=== CONTENT: Found potential subject element:', {
+          tagName: element.tagName,
+          text: element.textContent,
+          html: element.innerHTML,
+          classes: element.className,
+          attributes: Array.from(element.attributes).map(attr => `${attr.name}="${attr.value}"`).join(', ')
+        }, '===');
+        return element;
+      }
+    }
+    
+    console.log('=== CONTENT: No subject element found ===');
+    return null;
+  }
+
+  findBodyElement(container) {
+    return container.querySelector('.aiL') ||
+           container.querySelector('.a3s') ||
+           container.querySelector('.gt') ||
+           container.querySelector('.msg') ||
+           container.querySelector('.thread');
+  }
+
+  findFromElement(container) {
+    return container.querySelector('.gD') ||
+           container.querySelector('.g2') ||
+           container.querySelector('.from') ||
+           document.querySelector('.gD');
   }
 }
 

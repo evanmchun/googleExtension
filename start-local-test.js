@@ -11,18 +11,14 @@ let taggedEmails = {};
 
 // Enable CORS for the extension
 app.use(cors({
-  origin: function(origin, callback) {
-    if (!origin || origin.startsWith('chrome-extension://')) {
-      callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS'));
-    }
-  },
+  origin: ['chrome-extension://*'],
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
   allowedHeaders: ['Content-Type']
 }));
 
-app.use(bodyParser.json());
+// Increase payload size limit to 50mb
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // Get all tagged emails for a user
 app.get('/api/emails/:userEmail', (req, res) => {
