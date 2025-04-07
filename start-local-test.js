@@ -162,5 +162,83 @@ app.post('/api/emails', (req, res) => {
   }
 });
 
+// Add message to an email
+app.post('/api/emails/:emailId/messages', (req, res) => {
+  console.log('=== SERVER: Adding message to email:', req.params.emailId, '===');
+  console.log('=== SERVER: Message data:', req.body, '===');
+  
+  try {
+    const emailId = decodeURIComponent(req.params.emailId);
+    const { message } = req.body;
+
+    if (!emailId || !message || !message.text || !message.author) {
+      console.error('=== SERVER: Invalid message data ===');
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Invalid message data' 
+      });
+    }
+
+    // Find the email
+    const email = taggedEmails[emailId];
+    if (!email) {
+      console.error('=== SERVER: Email not found:', emailId, '===');
+      return res.status(404).json({ 
+        success: false, 
+        error: 'Email not found' 
+      });
+    }
+
+    // Initialize suggestions array if it doesn't exist
+    if (!email.suggestions) {
+      email.suggestions = [];
+    }
+
+    // Add the message
+    email.suggestions.push(message);
+    console.log('=== SERVER: Message added successfully ===');
+    
+    return res.json({ 
+      success: true, 
+      messageId: message.id 
+    });
+  } catch (error) {
+    console.error('=== SERVER: Error adding message:', error, '===');
+    return res.status(500).json({ 
+      success: false, 
+      error: error.message 
+    });
+  }
+});
+
+// Get messages for an email
+app.get('/api/emails/:emailId/messages', (req, res) => {
+  console.log('=== SERVER: Getting messages for email:', req.params.emailId, '===');
+  
+  try {
+    const emailId = decodeURIComponent(req.params.emailId);
+    const email = taggedEmails[emailId];
+
+    if (!email) {
+      console.error('=== SERVER: Email not found:', emailId, '===');
+      return res.status(404).json({ 
+        success: false, 
+        error: 'Email not found' 
+      });
+    }
+
+    return res.json({ 
+      success: true, 
+      messages: email.suggestions || [] 
+    });
+  } catch (error) {
+    console.error('=== SERVER: Error getting messages:', error, '===');
+    return res.status(500).json({ 
+      success: false, 
+      error: error.message 
+    });
+  }
+});
+
 // Start the server with the new startup function
 startServer(PORT).catch(console.error); 

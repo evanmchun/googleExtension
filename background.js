@@ -370,48 +370,92 @@ setInterval(async () => {
 
 // Add a suggestion to an email
 async function addSuggestion(emailId, suggestion, author) {
-  console.log('=== BACKGROUND: Adding suggestion to email:', emailId, '===');
-  console.log('=== BACKGROUND: Suggestion:', suggestion, '===');
+  console.log('=== BACKGROUND: Adding message to thread:', emailId, '===');
+  console.log('=== BACKGROUND: Message:', suggestion, '===');
   console.log('=== BACKGROUND: Author:', author, '===');
   
   try {
-    // For testing, use local storage instead of the server
-    console.log('=== BACKGROUND: Using local storage for testing ===');
-    const result = await chrome.storage.local.get(['taggedEmails']);
-    console.log('=== BACKGROUND: Current storage state:', result, '===');
-    
-    const taggedEmails = result.taggedEmails || {};
-    
+    // Create the new message data
+    const messageData = {
+      id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      text: suggestion,
+      author,
+      timestamp: Date.now()
+    };
+
+    // First update local storage
+    console.log('=== BACKGROUND: Updating local storage ===');
+    const storage = await chrome.storage.local.get(['taggedEmails']);
+    const taggedEmails = storage.taggedEmails || {};
+
     if (!taggedEmails[emailId]) {
       console.error('=== BACKGROUND: Email not found:', emailId, '===');
-      throw new Error('Email not found');
+      throw new Error('Email not found in storage');
     }
-    
+
     // Initialize suggestions array if it doesn't exist
     if (!taggedEmails[emailId].suggestions) {
       taggedEmails[emailId].suggestions = [];
     }
-    
-    // Add the new suggestion
-    taggedEmails[emailId].suggestions.push({
-      text: suggestion,
-      author,
-      timestamp: Date.now()
-    });
-    
-    // Save to local storage
-    console.log('=== BACKGROUND: Saving to local storage ===');
+
+    // Add the new message
+    taggedEmails[emailId].suggestions.push(messageData);
+
+    // Save to local storage first
     await chrome.storage.local.set({ taggedEmails });
-    
-    // Verify the save
-    const verifyResult = await chrome.storage.local.get(['taggedEmails']);
-    console.log('=== BACKGROUND: Verification - Data in storage after save:', verifyResult, '===');
-    
-    console.log('=== BACKGROUND: Suggestion added successfully ===');
-    return { success: true };
+    console.log('=== BACKGROUND: Local storage updated successfully ===');
+
+    // Try to send to server
+    try {
+      console.log('=== BACKGROUND: Sending message to server ===');
+      const response = await fetch(`${SERVER_URL}/api/emails/${encodeURIComponent(emailId)}/messages`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({
+          message: messageData
+        })
+      });
+
+      const responseText = await response.text();
+      console.log('=== BACKGROUND: Server response text:', responseText, '===');
+
+      if (!response.ok) {
+        console.warn('=== BACKGROUND: Server error:', response.status, responseText, '===');
+      } else {
+        try {
+          const result = JSON.parse(responseText);
+          console.log('=== BACKGROUND: Server response parsed:', result, '===');
+        } catch (parseError) {
+          console.warn('=== BACKGROUND: Could not parse server response:', parseError, '===');
+        }
+      }
+    } catch (serverError) {
+      console.warn('=== BACKGROUND: Server communication error:', serverError, '===');
+      // Continue since we already saved to local storage
+    }
+
+    // Create a notification for the recipient
+    const recipientEmail = taggedEmails[emailId].taggedPeople[0];
+    if (recipientEmail && recipientEmail !== author) {
+      // Get the subject from either email structure
+      const subject = taggedEmails[emailId].emailData?.subject || taggedEmails[emailId].email?.subject || 'No Subject';
+      
+      chrome.notifications.create({
+        type: 'basic',
+        iconUrl: 'icons/icon48.png',
+        title: 'New Message',
+        message: `${author} sent a new message in the thread "${subject}"`
+      });
+    }
+
+    console.log('=== BACKGROUND: Message added successfully ===');
+    return { success: true, messageId: messageData.id };
   } catch (error) {
-    console.error('=== BACKGROUND: Error adding suggestion:', error, '===');
-    throw error;
+    console.error('=== BACKGROUND: Error adding message:', error, '===');
+    return { success: false, error: error.message };
   }
 }
 
@@ -447,4 +491,14 @@ async function clearLocalStorage() {
     console.error('=== BACKGROUND: Error clearing local storage:', error, '===');
     return { success: false, error: error.message };
   }
-} 
+}
+
+// Handle extension icon click
+chrome.action.onClicked.addListener(() => {
+  chrome.windows.create({
+    url: 'window.html',
+    type: 'popup',
+    width: 1000,
+    height: 800
+  });
+}); 
