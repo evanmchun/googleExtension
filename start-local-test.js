@@ -11,10 +11,21 @@ let taggedEmails = {};
 
 // Enable CORS for the extension
 app.use(cors({
-  origin: ['chrome-extension://*'],
+  origin: true, // Allow all origins during development
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
-  allowedHeaders: ['Content-Type']
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true
 }));
+
+// Add error handling middleware
+app.use((err, req, res, next) => {
+  console.error('Server error:', err);
+  res.status(500).json({ 
+    success: false, 
+    error: err.message || 'Internal server error',
+    stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+  });
+});
 
 // Increase payload size limit to 50mb
 app.use(express.json({ limit: '50mb' }));
@@ -114,8 +125,7 @@ app.post('/api/emails/:emailId/suggestions', (req, res) => {
 // Add better error logging for the /api/emails endpoint
 app.post('/api/emails', (req, res) => {
   try {
-    console.log('Received POST request to /api/emails');
-    console.log('Request body:', JSON.stringify(req.body, null, 2));
+    console.log('=== LOCAL SERVER: Received email data:', JSON.stringify(req.body, null, 2), '===');
     
     const { emailData, taggedPeople, note, requester } = req.body;
     
@@ -140,6 +150,8 @@ app.post('/api/emails', (req, res) => {
       status: 'pending',
       suggestions: []
     };
+    
+    console.log('=== LOCAL SERVER: Created new email object:', JSON.stringify(newEmail, null, 2), '===');
     
     taggedEmails[emailId] = newEmail;
     console.log(`Added new email with ID: ${emailId}`);

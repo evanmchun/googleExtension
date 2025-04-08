@@ -44,6 +44,13 @@ async function loadRequests() {
     const emailCount = Object.keys(emails).length;
     console.log('=== WINDOW: Received', emailCount, 'emails ===');
     
+    // Log the first email to see its structure
+    if (emailCount > 0) {
+      const firstEmailId = Object.keys(emails)[0];
+      const firstEmail = emails[firstEmailId];
+      console.log('=== WINDOW: First email structure:', JSON.stringify(firstEmail, null, 2), '===');
+    }
+    
     if (emailCount === 0) {
       loadingEl.style.display = 'none';
       emptyEl.style.display = 'block';
@@ -57,8 +64,9 @@ async function loadRequests() {
     // Create email cards
     const emailCards = sortedEmails.map(([emailId, email]) => {
       const suggestions = email.suggestions || [];
-      const subject = email.emailData?.subject || email.subject || 'No Subject';
-      const from = email.emailData?.from || email.from || 'Unknown Sender';
+      const subject = email.email?.subject || 'No Subject';
+      const from = email.email?.from || 'Unknown Sender';
+      const body = email.email?.body || 'No content available';
       
       return `
         <div class="email-card" data-email-id="${emailId}">
@@ -72,6 +80,12 @@ async function loadRequests() {
               Requester: ${escapeHtml(email.requester)}<br>
               Tagged: ${escapeHtml(email.taggedPeople.join(', '))}<br>
               Note: ${escapeHtml(email.note || '')}
+            </div>
+          </div>
+          <div class="email-content" style="margin: 15px 0; padding: 15px; background: #f8f9fa; border-radius: 4px;">
+            <h4>Email Content:</h4>
+            <div style="max-height: 300px; overflow-y: auto; white-space: pre-wrap; font-family: monospace; font-size: 12px; line-height: 1.5; margin-top: 8px; padding: 10px; background: white; border: 1px solid #e0e0e0; border-radius: 4px;">
+              ${escapeHtml(body)}
             </div>
           </div>
           <div class="suggestions">

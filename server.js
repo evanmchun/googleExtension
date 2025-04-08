@@ -83,6 +83,8 @@ app.get('/api/emails/:userEmail', async (req, res) => {
 // Add a new tagged email
 app.post('/api/emails', async (req, res) => {
   try {
+    console.log('=== SERVER: Received email data:', JSON.stringify(req.body, null, 2), '===');
+    
     const { emailData, taggedPeople, note, requester } = req.body;
     const emailId = `${emailData.subject}-${Date.now()}`;
     
@@ -96,6 +98,8 @@ app.post('/api/emails', async (req, res) => {
       status: 'pending',
       suggestions: []
     });
+    
+    console.log('=== SERVER: Created new email document:', JSON.stringify(newEmail, null, 2), '===');
     
     await newEmail.save();
     res.json({ success: true, emailId });

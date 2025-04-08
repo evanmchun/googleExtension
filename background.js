@@ -208,6 +208,8 @@ async function handleEmailTagging(data) {
       suggestions: []
     };
     
+    console.log('=== BACKGROUND: New email data structure:', JSON.stringify(newEmailData, null, 2), '===');
+    
     console.log('=== BACKGROUND: Sending data to server:', {
       url: `${SERVER_URL}/api/emails`,
       method: 'POST',
