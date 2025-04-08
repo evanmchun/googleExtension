@@ -183,15 +183,6 @@ async function handleEmailTagging(data) {
       note: data.note
     }, '===');
     
-    // Get the current user's email
-    const userEmail = await getUserEmail();
-    console.log('=== BACKGROUND: Current user email:', userEmail, '===');
-    
-    if (!userEmail) {
-      console.error('=== BACKGROUND: Could not determine user email ===');
-      return { success: false, error: 'Could not determine user email' };
-    }
-    
     // Create the new email data
     const newEmailData = {
       emailData: {
@@ -202,7 +193,7 @@ async function handleEmailTagging(data) {
       },
       taggedPeople: data.taggedPeople,
       note: data.note || '', // Ensure note is included
-      requester: userEmail,
+      requester: data.emailData.from, // Use the sender's email as the requester
       timestamp: Date.now(),
       status: 'pending',
       suggestions: []

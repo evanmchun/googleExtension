@@ -511,57 +511,22 @@ class GmailHelper {
     try {
       // Find the email container
       const emailContainer = this.findEmailContainer();
-      console.log('=== CONTENT: Email container attempts:', {
-        main: !!document.querySelector('.h7'),
-        ads: !!document.querySelector('.ads'),
-        gs: !!document.querySelector('.gs'),
-        gt: !!document.querySelector('.gt'),
-        main_role: !!document.querySelector('div[role="main"]')
-      }, '===');
-      
       if (!emailContainer) {
         console.log('=== CONTENT: No email container found ===');
         return false;
       }
       
-      console.log('=== CONTENT: Found email container:', !!emailContainer, '===');
-      console.log('=== CONTENT: Email container classes:', emailContainer.className, '===');
-      console.log('=== CONTENT: Email container structure:', {
-        childNodes: emailContainer.childNodes.length,
-        innerHTML: emailContainer.innerHTML.substring(0, 100) + '...'
-      }, '===');
-      
       // Find subject, body, and from elements
       const subjectElement = this.findSubjectElement(emailContainer);
       const bodyElement = this.findBodyElement(emailContainer);
       const fromElement = this.findFromElement(emailContainer);
-      
-      console.log('=== CONTENT: Subject element attempts:', {
-        'h2.hP': !!document.querySelector('h2.hP'),
-        '.hP': !!document.querySelector('.hP'),
-        'ha h2': !!document.querySelector('.ha h2'),
-        'thread h2': !!document.querySelector('.thread h2')
-      }, '===');
-      
-      console.log('=== CONTENT: Body element attempts:', {
-        'aiL': !!document.querySelector('.aiL'),
-        'a3s': !!document.querySelector('.a3s'),
-        'gt': !!document.querySelector('.gt'),
-        'msg': !!document.querySelector('.msg'),
-        'thread': !!document.querySelector('.thread')
-      }, '===');
-      
-      console.log('=== CONTENT: From element attempts:', {
-        'gD container': !!emailContainer.querySelector('.gD'),
-        'g2 container': !!emailContainer.querySelector('.g2'),
-        'from container': !!emailContainer.querySelector('.from'),
-        'gD document': !!document.querySelector('.gD')
-      }, '===');
+      const toElement = this.findToElement(emailContainer);
       
       console.log('=== CONTENT: Found elements:', {
         subject: !!subjectElement,
         body: !!bodyElement,
-        from: !!fromElement
+        from: !!fromElement,
+        to: !!toElement
       }, '===');
       
       if (!subjectElement || !bodyElement || !fromElement) {
@@ -571,48 +536,39 @@ class GmailHelper {
       
       // Get subject text
       const subject = subjectElement.textContent.trim();
-      console.log('=== CONTENT: Subject element:', {
-        text: subject,
-        html: subjectElement.innerHTML,
-        classes: subjectElement.className
-      }, '===');
       
       // Get body text
       let body = bodyElement.textContent.trim();
-      // Trim body to max 10000 characters
       if (body.length > 10000) {
         body = body.substring(0, 10000) + '... [Content truncated]';
       }
-      console.log('=== CONTENT: Body element:', {
-        text: body.substring(0, 100) + '...',
-        classes: bodyElement.className
-      }, '===');
       
       // Get sender info
       const fromEmail = fromElement.getAttribute('email') || fromElement.textContent.trim();
-      console.log('=== CONTENT: From element:', {
-        email: fromEmail,
-        text: fromElement.textContent.trim(),
-        classes: fromElement.className
-      }, '===');
+      
+      // Get recipient info (requester)
+      const toEmail = toElement ? toElement.getAttribute('email') || toElement.textContent.trim() : null;
+      console.log('=== CONTENT: Recipient email:', toEmail, '===');
       
       // Create email data object
       const emailData = {
         subject,
         body,
         from: fromEmail,
+        to: toEmail, // Add the recipient email
         timestamp: Date.now()
       };
       
       console.log('=== CONTENT: Constructed email data:', {
         subject: emailData.subject,
         from: emailData.from,
+        to: emailData.to,
         bodyLength: emailData.body.length,
         timestamp: emailData.timestamp
       }, '===');
       
       // Check if email has changed
-      const emailKey = `${subject}-${fromEmail}`;
+      const emailKey = `${subject}-${fromEmail}-${toEmail}`;
       if (this.currentEmail && this.currentEmailKey === emailKey) {
         console.log('=== CONTENT: Email unchanged, keeping current data with key:', emailKey, '===');
         return false;
@@ -621,13 +577,58 @@ class GmailHelper {
       console.log('=== CONTENT: Email changed, updating current email ===');
       this.currentEmail = emailData;
       this.currentEmailKey = emailKey;
-      console.log('=== CONTENT: Current email updated with key:', emailKey, '===');
       
       return true;
     } catch (error) {
       console.error('=== CONTENT: Error in updateCurrentEmail:', error, '===');
       return false;
     }
+  }
+
+  findToElement(container) {
+    console.log('Finding recipient element...');
+    
+    // Try to find the recipient element using Gmail's structure
+    const selectors = [
+      'span[email][data-hovercard-id]', // Gmail's modern email attribute
+      'span[email]', // Email attribute
+      '.gD[email]', // Gmail's older structure
+      '.g2[email]', // Alternative Gmail class
+      'div[role="gridcell"] span[email]', // Grid cell containing email
+      'tr[data-legacy-last-message-id] td span[email]' // Legacy view
+    ];
+    
+    for (const selector of selectors) {
+      const elements = document.querySelectorAll(selector);
+      for (const element of elements) {
+        const email = element.getAttribute('email');
+        const text = element.textContent.trim();
+        console.log('Checking recipient element:', { selector, email, text });
+        
+        // If this is a "to" field element
+        if (email && (
+          element.closest('tr')?.textContent.includes('to:') ||
+          element.closest('div')?.textContent.includes('to:')
+        )) {
+          console.log('Found recipient element:', { email, text });
+          return element;
+        }
+      }
+    }
+    
+    // If no element found with selectors, try to find any element containing "to:"
+    const toElements = Array.from(document.querySelectorAll('*')).filter(el => 
+      el.textContent.includes('to:') && 
+      el.textContent.includes('@')
+    );
+    
+    if (toElements.length > 0) {
+      console.log('Found potential recipient element by text content');
+      return toElements[0];
+    }
+    
+    console.log('No recipient element found');
+    return null;
   }
 
   addTagButton(toolbar) {
@@ -883,150 +884,43 @@ class GmailHelper {
   }
 
   findSubjectElement(container) {
-    console.log('=== CONTENT: Finding subject element in container ===');
+    console.log('Finding subject element...');
     
-    // Try all possible selectors
-    const selectors = [
-      'h2.hP',
-      '.hP',
-      '.ha h2',
-      '.thread h2',
-      'h2[role="heading"]',
-      '.h2',
-      '.subject',
-      '[data-thread-perm-id] h2',
-      '.gD h2',
-      '.g2 h2',
-      '.thread-subject',
-      '.thread-title',
-      // Add more Gmail-specific selectors
-      '.h2[role="heading"]',
-      '.h2.hP',
-      '.h2.thread-subject',
-      '.h2.thread-title',
-      '.h2.subject',
-      '.h2[data-thread-perm-id]',
-      '.h2.gD',
-      '.h2.g2',
-      // Add selectors for newer Gmail versions
-      'h2[data-thread-perm-id]',
-      'h2[role="heading"][data-thread-perm-id]',
-      '.h2[role="heading"][data-thread-perm-id]',
-      '.h2[role="heading"].hP',
-      '.h2[role="heading"].thread-subject',
-      '.h2[role="heading"].thread-title',
-      '.h2[role="heading"].subject',
-      '.h2[role="heading"].gD',
-      '.h2[role="heading"].g2',
-      // Add more general selectors
-      'h2',
-      '[role="heading"]',
-      '.subject',
-      '.thread-subject',
-      '.thread-title',
-      '.email-subject',
-      '.email-title',
-      '.email-header h2',
-      '.email-header [role="heading"]',
-      '.email-header .subject',
-      '.email-header .thread-subject',
-      '.email-header .thread-title',
-      '.email-header .email-subject',
-      '.email-header .email-title',
-      '.email-header h2[role="heading"]',
-      '.email-header .h2[role="heading"]',
-      '.email-header .h2',
-      '.email-header [role="heading"]',
-      '.email-header .subject',
-      '.email-header .thread-subject',
-      '.email-header .thread-title',
-      '.email-header .email-subject',
-      '.email-header .email-title'
-    ];
-    
-    // Log all potential subject elements found
-    selectors.forEach(selector => {
-      const elements = container.querySelectorAll(selector);
-      if (elements.length > 0) {
-        console.log(`=== CONTENT: Found ${elements.length} elements with selector "${selector}" ===`);
-        elements.forEach((element, index) => {
-          console.log(`=== CONTENT: Element ${index + 1}:`, {
-            text: element.textContent,
-            html: element.innerHTML,
-            classes: element.className,
-            attributes: Array.from(element.attributes).map(attr => `${attr.name}="${attr.value}"`).join(', ')
-          }, '===');
-        });
-      }
-    });
-    
-    // Try to find the element
-    for (const selector of selectors) {
-      const element = container.querySelector(selector);
-      if (element && element.textContent.trim()) {
-        console.log(`=== CONTENT: Using subject element found with selector "${selector}" ===`);
-        return element;
+    // Try to find the exact Gmail subject header structure
+    const exactSubjectHeader = document.querySelector('h2[jsname="r4nke"][data-thread-perm-id].hP');
+    if (exactSubjectHeader) {
+      console.log('Found exact Gmail subject header:', {
+        text: exactSubjectHeader.textContent,
+        threadId: exactSubjectHeader.getAttribute('data-thread-perm-id'),
+        className: exactSubjectHeader.className
+      });
+      return exactSubjectHeader;
+    }
+
+    // Try finding just by jsname and class
+    const subjectByJsname = document.querySelector('h2[jsname="r4nke"].hP');
+    if (subjectByJsname) {
+      console.log('Found Gmail subject by jsname:', subjectByJsname);
+      return subjectByJsname;
+    }
+
+    // Try finding by class only
+    const subjectByClass = document.querySelector('h2.hP');
+    if (subjectByClass) {
+      console.log('Found Gmail subject by class:', subjectByClass);
+      return subjectByClass;
+    }
+
+    // Try finding in the container
+    if (container) {
+      const containerSubject = container.querySelector('h2[jsname="r4nke"], h2.hP');
+      if (containerSubject) {
+        console.log('Found subject in container:', containerSubject);
+        return containerSubject;
       }
     }
-    
-    // If no element found with selectors, try to find any h2 that looks like a subject
-    const allH2s = container.querySelectorAll('h2');
-    console.log(`=== CONTENT: Found ${allH2s.length} total h2 elements ===`);
-    
-    for (const h2 of allH2s) {
-      // Check if this h2 looks like a subject (contains text, not empty, etc)
-      if (h2.textContent.trim() && !h2.querySelector('h2')) {
-        console.log('=== CONTENT: Found potential subject h2:', {
-          text: h2.textContent,
-          html: h2.innerHTML,
-          classes: h2.className,
-          attributes: Array.from(h2.attributes).map(attr => `${attr.name}="${attr.value}"`).join(', ')
-        }, '===');
-        return h2;
-      }
-    }
-    
-    // If still no subject found, try to find any element with role="heading"
-    const headings = container.querySelectorAll('[role="heading"]');
-    console.log(`=== CONTENT: Found ${headings.length} elements with role="heading" ===`);
-    
-    for (const heading of headings) {
-      if (heading.textContent.trim()) {
-        console.log('=== CONTENT: Found potential subject heading:', {
-          text: heading.textContent,
-          html: heading.innerHTML,
-          classes: heading.className,
-          attributes: Array.from(heading.attributes).map(attr => `${attr.name}="${attr.value}"`).join(', ')
-        }, '===');
-        return heading;
-      }
-    }
-    
-    // If still no subject found, try to find any element that looks like a subject
-    const allElements = container.querySelectorAll('*');
-    console.log(`=== CONTENT: Found ${allElements.length} total elements ===`);
-    
-    for (const element of allElements) {
-      // Check if this element looks like a subject (contains text, not empty, etc)
-      if (element.textContent.trim() && 
-          (element.tagName === 'H2' || 
-           element.tagName === 'H1' || 
-           element.tagName === 'H3' || 
-           element.getAttribute('role') === 'heading' ||
-           element.className.includes('subject') ||
-           element.className.includes('title'))) {
-        console.log('=== CONTENT: Found potential subject element:', {
-          tagName: element.tagName,
-          text: element.textContent,
-          html: element.innerHTML,
-          classes: element.className,
-          attributes: Array.from(element.attributes).map(attr => `${attr.name}="${attr.value}"`).join(', ')
-        }, '===');
-        return element;
-      }
-    }
-    
-    console.log('=== CONTENT: No subject element found ===');
+
+    console.log('No subject element found');
     return null;
   }
 
