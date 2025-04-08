@@ -59,12 +59,9 @@ app.get('/api/emails/:userEmail', async (req, res) => {
   try {
     const userEmail = req.params.userEmail.toLowerCase();
     
-    // Find emails where user is requester or tagged
+    // Find emails where user is tagged
     const emails = await TaggedEmail.find({
-      $or: [
-        { requester: { $regex: new RegExp(userEmail, 'i') } },
-        { taggedPeople: { $regex: new RegExp(userEmail, 'i') } }
-      ]
+      taggedPeople: { $regex: new RegExp(userEmail, 'i') }
     });
     
     // Convert to the format expected by the extension

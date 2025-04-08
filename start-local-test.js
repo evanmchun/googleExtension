@@ -37,15 +37,14 @@ app.get('/api/emails/:userEmail', (req, res) => {
     const userEmail = req.params.userEmail.toLowerCase();
     console.log(`Getting emails for user: ${userEmail}`);
     
-    // Find emails where user is requester or tagged
+    // Find emails where user is tagged
     const userEmails = {};
     
     Object.entries(taggedEmails).forEach(([emailId, email]) => {
-      const isRequester = email.requester && email.requester.toLowerCase() === userEmail;
       const isTagged = email.taggedPeople && 
                       email.taggedPeople.some(person => person.toLowerCase() === userEmail);
       
-      if (isRequester || isTagged) {
+      if (isTagged) {
         userEmails[emailId] = email;
       }
     });
