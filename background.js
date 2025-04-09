@@ -193,83 +193,37 @@ async function getUserEmail() {
 
 // Handle email tagging
 async function handleEmailTagging(data) {
+  console.log('=== BACKGROUND: Handling email tagging request ===');
+  console.log('=== BACKGROUND: Request data:', data);
+  
   try {
-    console.log('=== BACKGROUND: Starting email tagging process ===');
-    console.log('=== BACKGROUND: Received data:', {
-      subject: data.emailData.subject,
-      from: data.emailData.from,
-      taggedPeople: data.taggedPeople,
-      note: data.note
-    }, '===');
-    
-    // Create the new email data
-    const newEmailData = {
-      emailData: {
-        subject: data.emailData.subject,
-        body: data.emailData.body,
-        from: data.emailData.from,
-        timestamp: data.emailData.timestamp
-      },
-      taggedPeople: data.taggedPeople,
-      note: data.note || '', // Ensure note is included
-      requester: data.emailData.from, // Use the sender's email as the requester
-      timestamp: Date.now(),
-      status: 'pending',
-      suggestions: []
-    };
-    
-    console.log('=== BACKGROUND: New email data structure:', JSON.stringify(newEmailData, null, 2), '===');
-    
-    console.log('=== BACKGROUND: Sending data to server:', {
-      url: `${SERVER_URL}/api/emails`,
-      method: 'POST',
-      data: newEmailData
-    }, '===');
-    
-    // Send to server
+    console.log('=== BACKGROUND: Sending request to server at http://localhost:3001/api/emails');
     const response = await fetch(`${SERVER_URL}/api/emails`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify(newEmailData)
+      body: JSON.stringify(data)
     });
+    
+    console.log('=== BACKGROUND: Server response status:', response.status);
     
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('=== BACKGROUND: Server error:', {
-        status: response.status,
-        statusText: response.statusText,
-        error: errorText
-      }, '===');
-      throw new Error(`Server error: ${response.status} ${response.statusText}`);
+      console.error('=== BACKGROUND: Server error response:', errorText);
+      throw new Error(`Server responded with status ${response.status}: ${errorText}`);
     }
     
     const result = await response.json();
-    console.log('=== BACKGROUND: Server response:', result, '===');
-    
-    if (!result.success) {
-      throw new Error(result.error || 'Unknown server error');
-    }
-    
-    // Also save to local storage for caching
-    const storage = await chrome.storage.local.get(['taggedEmails']);
-    const taggedEmails = storage.taggedEmails || {};
-    taggedEmails[result.emailId] = newEmailData;
-    await chrome.storage.local.set({ taggedEmails });
-    
-    // Create a notification
-    chrome.notifications.create({
-      type: 'basic',
-      iconUrl: 'icon.png',
-      title: 'Help Request Saved',
-      message: `Your help request has been saved and will be visible to ${data.taggedPeople.join(', ')}`
-    });
-    
-    console.log('=== BACKGROUND: Email tagging process completed successfully ===');
-    return { success: true, emailId: result.emailId };
+    console.log('=== BACKGROUND: Server response data:', result);
+    return { success: true, data: result };
   } catch (error) {
-    console.error('=== BACKGROUND: Error in email tagging process:', error, '===');
+    console.error('=== BACKGROUND: Error tagging email:', error);
+    console.error('=== BACKGROUND: Error details:', {
+      name: error.name,
+      message: error.message,
+      stack: error.stack
+    });
     return { success: false, error: error.message };
   }
 }
@@ -288,37 +242,47 @@ async function getTaggedEmails() {
       return {};
     }
     
-    console.log('=== BACKGROUND: Fetching emails from server ===');
-    const response = await fetch(`${SERVER_URL}/api/emails/${encodeURIComponent(userEmail)}`);
+    console.log('=== BACKGROUND: Fetching emails from server at http://localhost:3001/api/emails');
+    const response = await fetch(`${SERVER_URL}/api/emails?userEmail=${encodeURIComponent(userEmail)}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    console.log('=== BACKGROUND: Server response status:', response.status);
     
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('=== BACKGROUND: Server error:', {
-        status: response.status,
-        statusText: response.statusText,
-        error: errorText
-      }, '===');
-      throw new Error(`Server error: ${response.status} ${response.statusText}`);
+      console.error('=== BACKGROUND: Server error response:', errorText);
+      throw new Error(`Server responded with status ${response.status}: ${errorText}`);
     }
     
-    const result = await response.json();
-    console.log('=== BACKGROUND: Server response:', result, '===');
+    const data = await response.json();
+    console.log('=== BACKGROUND: Server response data:', data);
     
-    if (!result.success) {
-      throw new Error(result.error || 'Unknown server error');
+    // Handle empty array case
+    if (Array.isArray(data) && data.length === 0) {
+      console.log('=== BACKGROUND: No emails found, returning empty array');
+      return [];
     }
     
     // Cache the results in local storage
-    await chrome.storage.local.set({ taggedEmails: result.emails });
+    await chrome.storage.local.set({ taggedEmails: data });
     
-    return result.emails;
+    return data;
   } catch (error) {
-    console.error('=== BACKGROUND: Error getting tagged emails:', error, '===');
+    console.error('=== BACKGROUND: Error getting tagged emails:', error);
+    console.error('=== BACKGROUND: Error details:', {
+      name: error.name,
+      message: error.message,
+      stack: error.stack
+    });
     
     // Fallback to local storage if server is unavailable
     console.log('=== BACKGROUND: Falling back to local storage ===');
     const storage = await chrome.storage.local.get(['taggedEmails']);
-    return storage.taggedEmails || {};
+    return storage.taggedEmails || [];
   }
 }
 

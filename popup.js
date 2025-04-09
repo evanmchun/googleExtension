@@ -451,4 +451,83 @@ function escapeHtml(unsafe) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
+}
+
+function displayEmail(email) {
+  const emailItem = document.createElement('div');
+  emailItem.className = 'email-item';
+  
+  const emailHeader = document.createElement('div');
+  emailHeader.className = 'email-header';
+  
+  const subject = document.createElement('h3');
+  subject.textContent = email.subject;
+  
+  const timestamp = document.createElement('span');
+  timestamp.className = 'timestamp';
+  timestamp.textContent = new Date(email.timestamp).toLocaleString();
+  
+  emailHeader.appendChild(subject);
+  emailHeader.appendChild(timestamp);
+  
+  const emailDetails = document.createElement('div');
+  emailDetails.className = 'email-details';
+  
+  const from = document.createElement('p');
+  from.innerHTML = `<strong>From:</strong> ${email.from}`;
+  
+  const to = document.createElement('p');
+  to.innerHTML = `<strong>To:</strong> ${email.to}`;
+  
+  const requester = document.createElement('p');
+  requester.innerHTML = `<strong>Requester:</strong> ${email.requester}`;
+  
+  emailDetails.appendChild(from);
+  emailDetails.appendChild(to);
+  emailDetails.appendChild(requester);
+  
+  emailItem.appendChild(emailHeader);
+  emailItem.appendChild(emailDetails);
+  
+  if (email.suggestions && email.suggestions.length > 0) {
+    const suggestions = document.createElement('div');
+    suggestions.className = 'suggestions';
+    
+    const suggestionsHeader = document.createElement('h4');
+    suggestionsHeader.textContent = 'Suggestions';
+    suggestions.appendChild(suggestionsHeader);
+    
+    const suggestionsList = document.createElement('ul');
+    email.suggestions.forEach(suggestion => {
+      const suggestionItem = document.createElement('li');
+      suggestionItem.innerHTML = `
+        <p>${suggestion.text}</p>
+        <small>Added by ${suggestion.addedBy} on ${new Date(suggestion.timestamp).toLocaleString()}</small>
+      `;
+      suggestionsList.appendChild(suggestionItem);
+    });
+    suggestions.appendChild(suggestionsList);
+    emailItem.appendChild(suggestions);
+  }
+  
+  const addSuggestion = document.createElement('div');
+  addSuggestion.className = 'add-suggestion';
+  
+  const textarea = document.createElement('textarea');
+  textarea.placeholder = 'Add a suggestion...';
+  
+  const button = document.createElement('button');
+  button.textContent = 'Add Suggestion';
+  button.onclick = () => {
+    if (textarea.value.trim()) {
+      addSuggestionToEmail(email.id, textarea.value.trim());
+      textarea.value = '';
+    }
+  };
+  
+  addSuggestion.appendChild(textarea);
+  addSuggestion.appendChild(button);
+  emailItem.appendChild(addSuggestion);
+  
+  return emailItem;
 } 

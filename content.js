@@ -588,6 +588,10 @@ class GmailHelper {
   findToElement(container) {
     console.log('Finding recipient element...');
     
+    // First get the current user's email
+    const userEmail = this.getUserEmail();
+    console.log('Current user email:', userEmail);
+    
     // Try to find the recipient element using Gmail's structure
     const selectors = [
       'span[email][data-hovercard-id]', // Gmail's modern email attribute
@@ -598,6 +602,7 @@ class GmailHelper {
       'tr[data-legacy-last-message-id] td span[email]' // Legacy view
     ];
     
+    // First try to find elements with the current user's email
     for (const selector of selectors) {
       const elements = document.querySelectorAll(selector);
       for (const element of elements) {
@@ -605,26 +610,44 @@ class GmailHelper {
         const text = element.textContent.trim();
         console.log('Checking recipient element:', { selector, email, text });
         
-        // If this is a "to" field element
-        if (email && (
-          element.closest('tr')?.textContent.includes('to:') ||
-          element.closest('div')?.textContent.includes('to:')
-        )) {
-          console.log('Found recipient element:', { email, text });
+        // If this is the current user's email, it's the recipient
+        if (email === userEmail) {
+          console.log('Found recipient element (current user):', { email, text });
           return element;
         }
       }
     }
     
-    // If no element found with selectors, try to find any element containing "to:"
-    const toElements = Array.from(document.querySelectorAll('*')).filter(el => 
-      el.textContent.includes('to:') && 
-      el.textContent.includes('@')
-    );
+    // If not found by email match, try to find by text content and position
+    for (const selector of selectors) {
+      const elements = document.querySelectorAll(selector);
+      for (const element of elements) {
+        const email = element.getAttribute('email');
+        const text = element.textContent.trim();
+        const parentText = element.closest('div')?.textContent || '';
+        
+        // Check if this is a recipient element based on text content and position
+        if (email && (
+          parentText.toLowerCase().includes('to:') ||
+          parentText.toLowerCase().includes('to me') ||
+          text.toLowerCase() === 'me' ||
+          element.closest('tr')?.textContent.toLowerCase().includes('to:') ||
+          element.closest('div')?.textContent.toLowerCase().includes('to:')
+        )) {
+          console.log('Found recipient element by text content:', { email, text });
+          return element;
+        }
+      }
+    }
     
-    if (toElements.length > 0) {
-      console.log('Found potential recipient element by text content');
-      return toElements[0];
+    // If still not found, try to find any element with the email attribute that's not the sender
+    const allEmailElements = document.querySelectorAll('[email]');
+    for (const element of allEmailElements) {
+      const email = element.getAttribute('email');
+      if (email && email !== this.currentEmail?.from) {
+        console.log('Found recipient element as last resort:', { email });
+        return element;
+      }
     }
     
     console.log('No recipient element found');
@@ -727,145 +750,71 @@ class GmailHelper {
     const noteInput = this.sidebar.querySelector('#note-input');
     
     console.log('=== CONTENT: Input values:', {
-      tagInput: tagInput?.value || 'not found',
-      noteInput: noteInput?.value || 'not found'
-    }, '===');
+      tagInput: tagInput.value,
+      noteInput: noteInput.value
+    });
     
-    if (!tagInput || !noteInput) {
-      console.error('=== CONTENT: Could not find input elements ===');
-      alert('Error: Could not find input fields');
-      return;
-    }
-    
-    const taggedPeople = tagInput.value.split(',').map(email => email.trim()).filter(email => email);
+    // Process inputs
+    const taggedPeople = tagInput.value.split(',').map(email => email.trim());
     const note = noteInput.value.trim();
     
     console.log('=== CONTENT: Processed inputs:', {
       taggedPeople,
       note
-    }, '===');
+    });
     
-    if (taggedPeople.length === 0) {
-      console.log('=== CONTENT: No email addresses entered ===');
-      alert('Please enter at least one email address');
-      return;
-    }
-
-    if (!this.currentEmail) {
-      console.log('=== CONTENT: No email selected/captured ===');
-      alert('No email selected');
-      return;
-    }
-
+    // Get current user email
+    const currentUserEmail = await this.getUserEmail();
+    console.log('=== CONTENT: Current user email:', currentUserEmail);
+    
+    // Get current email data
+    console.log('=== CONTENT: Current email data:', this.currentEmail);
+    
+    // Prepare tag request
+    const tagRequest = {
+      emailData: {
+        subject: this.currentEmail.subject,
+        body: this.currentEmail.body,
+        from: this.currentEmail.from,
+        timestamp: this.currentEmail.timestamp
+      },
+      taggedPeople,
+      note,
+      requester: currentUserEmail,
+      timestamp: Date.now(),
+      status: 'pending',
+      suggestions: []
+    };
+    
+    console.log('=== CONTENT: Preparing tag request with data:', tagRequest);
+    
     try {
-      const requestData = {
-        emailData: this.currentEmail,
-        taggedPeople,
-        note: note // Ensure note is included in request data
-      };
-      
-      console.log('=== CONTENT: Preparing tag request with data:', requestData, '===');
-
-      const response = await this.sendMessage({
+      // Send tag request to background script
+      const response = await chrome.runtime.sendMessage({
         type: 'TAG_EMAIL',
-        data: requestData
+        data: tagRequest
       });
-
-      console.log('=== CONTENT: Received tag response:', response, '===');
-
-      if (response && response.success) {
-        console.log('=== CONTENT: Tag request successful ===');
-        // Show success message
-        const notification = document.createElement('div');
-        notification.className = 'email-helper-notification';
-        notification.innerHTML = `
-          <div class="notification-content">
-            <div class="notification-title">✓ Help request sent successfully!</div>
-            <div class="notification-text">
-              To view all help requests, click the puzzle piece icon 🧩 in Chrome's toolbar 
-              and select "Email Reply Helper"
-            </div>
-            <button class="notification-close">×</button>
-          </div>
-        `;
-
-        // Add styles for the notification
-        const style = document.createElement('style');
-        style.textContent = `
-          .email-helper-notification {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            z-index: 9999;
-            background: white;
-            border-radius: 8px;
-            box-shadow: 0 2px 6px rgba(0,0,0,0.2);
-            padding: 16px;
-            max-width: 400px;
-            animation: slideIn 0.3s ease-out;
-          }
-          .notification-content {
-            position: relative;
-          }
-          .notification-title {
-            font-weight: 500;
-            margin-bottom: 8px;
-            color: #137333;
-          }
-          .notification-text {
-            color: #3c4043;
-            font-size: 14px;
-            line-height: 1.4;
-          }
-          .notification-close {
-            position: absolute;
-            top: -8px;
-            right: -8px;
-            border: none;
-            background: none;
-            font-size: 20px;
-            cursor: pointer;
-            color: #5f6368;
-          }
-          @keyframes slideIn {
-            from {
-              transform: translateX(100%);
-              opacity: 0;
-            }
-            to {
-              transform: translateX(0);
-              opacity: 1;
-            }
-          }
-        `;
-        document.head.appendChild(style);
-
-        document.body.appendChild(notification);
-
-        // Add close button handler
-        notification.querySelector('.notification-close').addEventListener('click', () => {
-          notification.remove();
-        });
-
-        // Clear inputs and close sidebar
-        tagInput.value = '';
-        noteInput.value = '';
-        this.sidebar.classList.remove('active');
-        console.log('=== CONTENT: Inputs cleared and sidebar closed ===');
-
-        // Auto-close notification after 8 seconds
-        setTimeout(() => {
-          if (notification.parentNode) {
-            notification.remove();
-          }
-        }, 8000);
-      } else {
-        console.log('=== CONTENT: Tag request failed:', response?.error || 'Unknown error', '===');
-        throw new Error(response?.error || 'Failed to send help request');
+      
+      console.log('=== CONTENT: Received tag response:', response);
+      
+      if (!response) {
+        throw new Error('No response received from background script');
       }
+      
+      if (response.error) {
+        throw new Error(response.error);
+      }
+      
+      // Clear inputs and close sidebar on success
+      this.clearInputs();
+      this.closeSidebar();
+      
+      // Show success message
+      this.showError('Email tagged successfully!', 'success');
+      
     } catch (error) {
-      console.error('=== CONTENT: Error in handleTagging:', error, '===');
-      this.showError('Failed to send help request. Please refresh the page and try again.');
+      console.error('=== CONTENT: Error tagging email:', error);
+      this.showError(`Error tagging email: ${error.message}`);
     }
   }
 
@@ -937,6 +886,96 @@ class GmailHelper {
            container.querySelector('.g2') ||
            container.querySelector('.from') ||
            document.querySelector('.gD');
+  }
+
+  getUserEmail() {
+    console.log('=== CONTENT: Starting getUserEmail ===');
+    
+    // First try to find email in the profile picture element
+    const profilePicture = document.querySelector('img[aria-label*="@"]');
+    if (profilePicture) {
+      const email = profilePicture.getAttribute('aria-label');
+      console.log('=== CONTENT: Found email in profile picture:', email, '===');
+      if (email) return email;
+    }
+
+    // Try to find email in the account switcher
+    const accountSwitcher = document.querySelector('div[data-ogab]');
+    if (accountSwitcher) {
+      const email = accountSwitcher.getAttribute('data-ogab');
+      console.log('=== CONTENT: Found email in account switcher:', email, '===');
+      if (email) return email;
+    }
+
+    // Try to find email in the profile element with better extraction
+    const profileElement = document.querySelector('a[aria-label*="@"]');
+    if (profileElement) {
+      const label = profileElement.getAttribute('aria-label');
+      // Extract email using regex that matches email pattern within parentheses
+      const emailMatch = label.match(/\(([^)]+@[^)]+)\)/);
+      if (emailMatch && emailMatch[1]) {
+        const email = emailMatch[1].trim();
+        console.log('=== CONTENT: Found email in profile element:', email, '===');
+        return email;
+      }
+    }
+
+    // Try to find email in the compose button
+    const composeButton = document.querySelector('div[role="button"][gh="cm"]');
+    if (composeButton) {
+      const email = composeButton.getAttribute('data-email');
+      console.log('=== CONTENT: Found email in compose button:', email, '===');
+      if (email) return email;
+    }
+
+    // Try to find email in the page content
+    const emailMatch = document.body.innerHTML.match(/"email":"([^"]+)"/);
+    if (emailMatch && emailMatch[1]) {
+      console.log('=== CONTENT: Found email in page content:', emailMatch[1], '===');
+      return emailMatch[1];
+    }
+
+    // Try additional selectors
+    const additionalSelectors = [
+      'div[data-email]',
+      'span[email]',
+      'a[data-email]',
+      'div[data-email-id]'
+    ];
+    
+    console.log('=== CONTENT: Trying additional selectors ===');
+    for (const selector of additionalSelectors) {
+      const element = document.querySelector(selector);
+      if (element) {
+        const email = element.getAttribute('data-email') || element.getAttribute('email');
+        if (email && email.includes('@')) {
+          console.log(`=== CONTENT: Found email using selector "${selector}":`, email, '===');
+          return email;
+        }
+      }
+    }
+
+    console.error('=== CONTENT: Could not find user email using any method ===');
+    return null;
+  }
+
+  clearInputs() {
+    console.log('=== CONTENT: Clearing inputs ===');
+    const tagInput = this.sidebar.querySelector('#tag-input');
+    const noteInput = this.sidebar.querySelector('#note-input');
+    
+    if (tagInput) tagInput.value = '';
+    if (noteInput) noteInput.value = '';
+    
+    console.log('=== CONTENT: Inputs cleared ===');
+  }
+
+  closeSidebar() {
+    console.log('=== CONTENT: Closing sidebar ===');
+    if (this.sidebar) {
+      this.sidebar.classList.remove('active');
+      console.log('=== CONTENT: Sidebar closed ===');
+    }
   }
 }
 
