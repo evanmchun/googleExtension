@@ -32,24 +32,31 @@ app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // Get all tagged emails for a user
-app.get('/api/emails/:userEmail', (req, res) => {
+app.get('/api/emails', (req, res) => {
   try {
-    const userEmail = req.params.userEmail.toLowerCase();
+    const userEmail = req.query.userEmail ? req.query.userEmail.toLowerCase() : null;
     console.log(`Getting emails for user: ${userEmail}`);
     
-    // Find emails where user is tagged
+    if (!userEmail) {
+      return res.status(400).json({ success: false, error: 'User email is required' });
+    }
+    
+    // Find emails where user is tagged or is the requester
     const userEmails = {};
     
     Object.entries(taggedEmails).forEach(([emailId, email]) => {
       const isTagged = email.taggedPeople && 
                       email.taggedPeople.some(person => person.toLowerCase() === userEmail);
+      const isRequester = email.requester && 
+                         email.requester.toLowerCase() === userEmail;
       
-      if (isTagged) {
+      if (isTagged || isRequester) {
         userEmails[emailId] = email;
       }
     });
     
     console.log(`Found ${Object.keys(userEmails).length} emails for user ${userEmail}`);
+    console.log('Emails:', JSON.stringify(userEmails, null, 2));
     res.json({ success: true, emails: userEmails });
   } catch (error) {
     console.error('Error getting emails:', error);
@@ -247,5 +254,12 @@ app.get('/api/emails/:emailId/messages', (req, res) => {
   }
 });
 
-// Start the server with the new startup function
-startServer(PORT).catch(console.error); 
+// Start the server
+startServer(PORT)
+  .then(() => {
+    console.log('Server started successfully');
+  })
+  .catch(error => {
+    console.error('Failed to start server:', error);
+    process.exit(1);
+  }); 
