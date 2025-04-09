@@ -1,6 +1,9 @@
 // Server configuration
 const SERVER_URL = 'http://localhost:3001'; // Local test server URL
 
+// Track popup window
+let popupWindowId = null;
+
 // Handle extension installation
 chrome.runtime.onInstalled.addListener(async () => {
   console.log('Email Reply Helper installed');
@@ -487,11 +490,37 @@ async function clearLocalStorage() {
 }
 
 // Handle extension icon click
-chrome.action.onClicked.addListener(() => {
-  chrome.windows.create({
+chrome.action.onClicked.addListener(async () => {
+  // Check if popup window already exists
+  if (popupWindowId !== null) {
+    try {
+      // Try to focus the existing window
+      const window = await chrome.windows.get(popupWindowId);
+      if (window) {
+        await chrome.windows.update(popupWindowId, { focused: true });
+        return;
+      }
+    } catch (error) {
+      // Window doesn't exist anymore, reset the ID
+      popupWindowId = null;
+    }
+  }
+
+  // Create new popup window
+  const popup = await chrome.windows.create({
     url: 'window.html',
     type: 'popup',
     width: 1000,
     height: 800
+  });
+  
+  // Store the window ID
+  popupWindowId = popup.id;
+
+  // Listen for window close
+  chrome.windows.onRemoved.addListener((windowId) => {
+    if (windowId === popupWindowId) {
+      popupWindowId = null;
+    }
   });
 }); 
