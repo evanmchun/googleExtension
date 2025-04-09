@@ -17,50 +17,67 @@ class GmailHelper {
     try {
       // Check if we're actually on Gmail
       const isGmail = window.location.hostname === 'mail.google.com';
-      console.log('Is Gmail page:', isGmail);
-      
       if (!isGmail) {
         console.log('Not a Gmail page, stopping initialization');
         return;
       }
 
       await this.waitForGmail();
+      console.log('Gmail UI should be stable now');
+      
+      // Create sidebar first
       console.log('Gmail loaded, creating sidebar...');
       this.createSidebar();
+
+      // Set up URL change detection with the new approach
+      console.log('Setting up URL change detection...');
+      let lastUrl = location.href;
       
-      console.log('Setting up email view detection...');
-      this.checkForEmailView();
-      
-      // Test connection with background script with retries
-      console.log('Testing connection with background script...');
-      let testResponse = null;
-      let retryCount = 0;
-      const maxRetries = 3;
-      
-      while (retryCount < maxRetries) {
-        try {
-          testResponse = await this.sendMessage({ type: 'TEST_CONNECTION' });
-          console.log('Connection test response:', testResponse);
-          break;
-        } catch (error) {
-          retryCount++;
-          console.log(`Connection test attempt ${retryCount} failed:`, error);
-          if (retryCount < maxRetries) {
-            console.log('Retrying in 1 second...');
-            await new Promise(resolve => setTimeout(resolve, 1000));
+      const observer = new MutationObserver(() => {
+        const currentUrl = location.href;
+        
+        if (currentUrl !== lastUrl) {
+          lastUrl = currentUrl;
+          
+          if (/^https:\/\/mail\.google\.com\/mail\/u\/\d+\/#inbox\/.+/.test(currentUrl)) {
+            // Check if we're in an open email thread
+            const threadView = document.querySelector('div[role="main"] .adn');
+            
+            if (threadView && !document.querySelector('.email-helper-tag-button')) {
+              console.log("Email thread is open - adding button");
+              
+              // Try to find the toolbar
+              const toolbar = threadView.querySelector('.ade') || 
+                            threadView.querySelector('.iH > div') ||
+                            threadView.querySelector('.amn') ||
+                            threadView.querySelector('.gH');
+              
+              if (toolbar) {
+                this.addTagButton(toolbar);
+              } else {
+                // If no toolbar found, add button at the top of thread view
+                const button = this.createTagButton();
+                button.style.margin = '10px 0';
+                threadView.prepend(button);
+              }
+              
+              // Update email data
+              this.updateCurrentEmail();
+            }
+          } else {
+            console.log("Inbox or other view - no button needed");
           }
         }
-      }
-      
-      if (!testResponse) {
-        console.warn('Could not establish connection with background script after retries');
-      }
-      
-      // Force initial button check
-      console.log('Forcing initial button check...');
-      this.buttonAddAttempts = 0;
-      this.tryAddButton();
-      
+      });
+
+      observer.observe(document, { childList: true, subtree: true });
+      console.log('URL observer initialized');
+
+      // Test connection with background script
+      console.log('Testing connection with background script...');
+      const testResponse = await this.sendMessage({ type: 'TEST_CONNECTION' });
+      console.log('Connection test response:', testResponse);
+
     } catch (error) {
       console.error('Initialization error:', error);
       this.showError('Extension needs to be reloaded. Please refresh the page.');
@@ -656,14 +673,13 @@ class GmailHelper {
 
   addTagButton(toolbar) {
     console.log('Adding tag button to toolbar...');
-    // Check if button already exists
-    const existingButton = document.querySelector('.email-helper-tag-button');
-    if (existingButton) {
-      console.log('Tag button already exists');
-      return;
-    }
+    const button = this.createTagButton();
+    toolbar.appendChild(button);
+    console.log('Tag button added successfully');
+  }
 
-    // Create the button with Gmail's style
+  createTagButton() {
+    console.log('Creating tag button...');
     const button = document.createElement('button');
     button.className = 'T-I J-J5-Ji email-helper-tag-button';
     button.setAttribute('role', 'button');
@@ -696,8 +712,8 @@ class GmailHelper {
     
     button.setAttribute('style', buttonStyle);
 
-    // Add click handler with debugging
-    const clickHandler = (e) => {
+    // Add click handler
+    button.addEventListener('click', (e) => {
       console.log('Get Help button clicked');
       e.preventDefault();
       e.stopPropagation();
@@ -709,39 +725,16 @@ class GmailHelper {
       if (this.sidebar) {
         console.log('Activating sidebar');
         this.sidebar.classList.add('active');
-        console.log('Sidebar class after activation:', this.sidebar.className);
         
         // Focus the tag input
         const tagInput = this.sidebar.querySelector('#tag-input');
         if (tagInput) {
           setTimeout(() => tagInput.focus(), 100);
         }
-      } else {
-        console.error('Sidebar not found');
       }
-    };
+    });
 
-    button.addEventListener('click', clickHandler);
-    button.addEventListener('mousedown', (e) => e.preventDefault());
-
-    // Insert the button into the toolbar
-    console.log('Inserting button into toolbar:', toolbar);
-    toolbar.appendChild(button);
-    
-    // Verify button is in DOM and styled correctly
-    const addedButton = document.querySelector('.email-helper-tag-button');
-    if (addedButton) {
-      const styles = window.getComputedStyle(addedButton);
-      console.log('Button successfully added with styles:', {
-        display: styles.display,
-        backgroundColor: styles.backgroundColor,
-        visibility: styles.visibility,
-        position: styles.position,
-        zIndex: styles.zIndex
-      });
-    }
-    
-    console.log('Tag button added successfully');
+    return button;
   }
 
   async handleTagging() {
@@ -976,6 +969,37 @@ class GmailHelper {
       this.sidebar.classList.remove('active');
       console.log('=== CONTENT: Sidebar closed ===');
     }
+  }
+
+  startButtonAddAttempts() {
+    console.log('Starting button add attempts...');
+    // Clear any existing interval
+    if (this.buttonAddInterval) {
+      clearInterval(this.buttonAddInterval);
+    }
+    
+    // Reset attempts counter
+    this.buttonAddAttempts = 0;
+    
+    // Try immediately first
+    this.tryAddButton();
+    
+    // Then set up an interval to keep trying
+    this.buttonAddInterval = setInterval(() => {
+      if (this.buttonAddAttempts >= this.maxButtonAttempts) {
+        console.log('Max button add attempts reached, stopping interval');
+        clearInterval(this.buttonAddInterval);
+        return;
+      }
+      
+      // Only try to add if we're still in an email view
+      if (location.href.match(/#inbox\/.*/)) {
+        this.tryAddButton();
+      } else {
+        console.log('No longer in email view, stopping attempts');
+        clearInterval(this.buttonAddInterval);
+      }
+    }, 500); // Try every 500ms
   }
 }
 
