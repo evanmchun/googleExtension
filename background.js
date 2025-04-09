@@ -19,7 +19,7 @@ chrome.runtime.onInstalled.addListener(async () => {
 
 // Listen for messages from content script and popup
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  console.log('=== BACKGROUND: Received message:', request.type, '===');
+  console.log('=== BACKGROUND: Received message:', request, '===');
   
   // Handle different message types
   if (request.type === 'TEST_CONNECTION') {
@@ -79,17 +79,33 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true; // Keep the message channel open for async response
   }
   else if (request.type === 'ADD_SUGGESTION') {
-    console.log('=== BACKGROUND: Handling ADD_SUGGESTION request ===');
-    addSuggestion(request.emailId, request.suggestion, request.author)
-      .then(response => {
-        console.log('=== BACKGROUND: ADD_SUGGESTION response:', response, '===');
-        sendResponse(response);
-      })
-      .catch(error => {
-        console.error('=== BACKGROUND: ADD_SUGGESTION error:', error, '===');
+    (async () => {
+      console.log('=== BACKGROUND: Handling ADD_SUGGESTION request ===');
+      try {
+        const { emailId, suggestion, author } = request.data;
+        const response = await fetch(`${SERVER_URL}/api/emails/${emailId}/suggestions`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            suggestion,
+            author
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error(`Server returned ${response.status}`);
+        }
+
+        const data = await response.json();
+        sendResponse({ success: true, data });
+      } catch (error) {
+        console.error('Error adding suggestion:', error);
         sendResponse({ success: false, error: error.message });
-      });
-    return true; // Keep the message channel open for async response
+      }
+    })();
+    return true;
   }
   else if (request.type === 'CLEAR_STORAGE') {
     console.log('=== BACKGROUND: Handling CLEAR_STORAGE request ===');

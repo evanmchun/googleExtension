@@ -122,10 +122,8 @@ async function loadRequests() {
     // Update the grid
     gridEl.innerHTML = emailCards;
     
-    // Add event listeners for send buttons
-    gridEl.querySelectorAll('.send-message').forEach(button => {
-      button.addEventListener('click', handleSendMessage);
-    });
+    // Add message handlers to the new buttons
+    addMessageHandlers();
     
     // Add event listeners for enter key in textareas
     gridEl.querySelectorAll('.message-input').forEach(textarea => {
@@ -149,63 +147,75 @@ async function loadRequests() {
   }
 }
 
-// Handle sending a message
-async function handleSendMessage(event) {
-  const button = event.target;
-  const emailId = button.dataset.emailId;
-  const textarea = button.parentElement.querySelector('.message-input');
-  const text = textarea.value.trim();
-  
-  if (!text) {
-    console.log('=== WINDOW: Empty message, not sending ===');
-    return;
-  }
-  
-  try {
-    button.disabled = true;
-    button.textContent = 'Sending...';
-    
-    // Get current user's email
-    const userResponse = await chrome.runtime.sendMessage({ type: 'GET_USER_EMAIL' });
-    if (!userResponse.success) {
-      throw new Error(userResponse.error || 'Could not get user email');
-    }
-    
-    // Send the message
-    const response = await chrome.runtime.sendMessage({
-      type: 'ADD_SUGGESTION',
-      emailId,
-      suggestion: text,
-      author: userResponse.email
+// Add click handlers to all send message buttons
+function addMessageHandlers() {
+  const sendButtons = document.querySelectorAll('.send-message');
+  sendButtons.forEach(button => {
+    button.addEventListener('click', async (event) => {
+      const emailId = event.target.dataset.emailId;
+      const textarea = event.target.parentElement.querySelector('.message-input');
+      const text = textarea.value.trim();
+      
+      if (!text) {
+        console.log('=== WINDOW: Empty message, not sending ===');
+        return;
+      }
+      
+      try {
+        // Disable button and show loading state
+        button.disabled = true;
+        button.textContent = 'Sending...';
+        
+        // Get current user's email
+        const userResponse = await chrome.runtime.sendMessage({ type: 'GET_USER_EMAIL' });
+        if (!userResponse.success) {
+          throw new Error(userResponse.error || 'Could not get user email');
+        }
+        
+        // Send the message
+        const response = await chrome.runtime.sendMessage({
+          type: 'ADD_SUGGESTION',
+          data: {
+            emailId,
+            suggestion: text,
+            author: userResponse.email
+          }
+        });
+        
+        if (!response.success) {
+          throw new Error(response.error || 'Failed to send message');
+        }
+        
+        // Clear the textarea
+        textarea.value = '';
+        
+        // Show success state
+        button.textContent = 'Sent!';
+        button.style.backgroundColor = '#34A853';
+        
+        // Reset button after 2 seconds
+        setTimeout(() => {
+          button.disabled = false;
+          button.textContent = 'Send Message';
+          button.style.backgroundColor = '';
+        }, 2000);
+        
+        // Reload to show the new message
+        await loadRequests();
+      } catch (error) {
+        console.error('=== WINDOW: Error sending message:', error, '===');
+        button.textContent = 'Failed to send';
+        button.style.backgroundColor = '#EA4335';
+        
+        // Reset button after 2 seconds
+        setTimeout(() => {
+          button.disabled = false;
+          button.textContent = 'Send Message';
+          button.style.backgroundColor = '';
+        }, 2000);
+      }
     });
-    
-    if (!response.success) {
-      throw new Error(response.error || 'Failed to send message');
-    }
-    
-    // Clear the textarea
-    textarea.value = '';
-    
-    // Show success state
-    button.textContent = 'Sent!';
-    button.style.backgroundColor = '#34A853';
-    
-    // Reset button after 2 seconds
-    setTimeout(() => {
-      button.disabled = false;
-      button.textContent = 'Send Message';
-      button.style.backgroundColor = '';
-    }, 2000);
-    
-    // Reload to show the new message
-    await loadRequests();
-  } catch (error) {
-    console.error('=== WINDOW: Error sending message:', error, '===');
-    alert('Failed to send message: ' + error.message);
-    button.disabled = false;
-    button.textContent = 'Send Message';
-    button.style.backgroundColor = '';
-  }
+  });
 }
 
 // Clear storage
