@@ -79,33 +79,16 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true; // Keep the message channel open for async response
   }
   else if (request.type === 'ADD_SUGGESTION') {
-    (async () => {
-      console.log('=== BACKGROUND: Handling ADD_SUGGESTION request ===');
-      try {
-        const { emailId, suggestion, author } = request.data;
-        const response = await fetch(`${SERVER_URL}/api/emails/${emailId}/suggestions`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            suggestion,
-            author
-          })
-        });
-
-        if (!response.ok) {
-          throw new Error(`Server returned ${response.status}`);
-        }
-
-        const data = await response.json();
-        sendResponse({ success: true, data });
-      } catch (error) {
-        console.error('Error adding suggestion:', error);
+    handleAddSuggestion(request.data)
+      .then(response => {
+        console.log('=== BACKGROUND: ADD_SUGGESTION response:', response, '===');
+        sendResponse(response);
+      })
+      .catch(error => {
+        console.error('=== BACKGROUND: ADD_SUGGESTION error:', error, '===');
         sendResponse({ success: false, error: error.message });
-      }
-    })();
-    return true;
+      });
+    return true; // Keep the message channel open for async response
   }
   else if (request.type === 'CLEAR_STORAGE') {
     console.log('=== BACKGROUND: Handling CLEAR_STORAGE request ===');
@@ -503,4 +486,57 @@ chrome.action.onClicked.addListener(async () => {
       popupWindowId = null;
     }
   });
-}); 
+});
+
+async function handleAddSuggestion(data) {
+  console.log('=== BACKGROUND: Handling ADD_SUGGESTION request ===');
+  try {
+    const { emailId, suggestion, author } = data;
+    
+    // Log the request data
+    console.log('=== BACKGROUND: Request data:', {
+      emailId,
+      suggestion,
+      author
+    });
+    
+    // Send suggestion to server
+    const response = await fetch(`${SERVER_URL}/api/emails/${emailId}/messages`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify({
+        message: {
+          text: suggestion,
+          author: author,
+          timestamp: Date.now()
+        }
+      })
+    });
+
+    // Log the response status
+    console.log('=== BACKGROUND: Server response status:', response.status);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('=== BACKGROUND: Server error response:', errorText);
+      throw new Error(`Server returned ${response.status}: ${errorText}`);
+    }
+
+    const result = await response.json();
+    console.log('=== BACKGROUND: Server response:', result);
+    
+    return {
+      success: true,
+      data: result
+    };
+  } catch (error) {
+    console.error('=== BACKGROUND: Error adding suggestion:', error);
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+} 
